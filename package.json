@@ -1,0 +1,42 @@
+{
+  "name": "dux-pjax",
+  "version": "0.1.0",
+  "description": "PJAX navigation helper for Dux applications.",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "clean": "rimraf dist",
+    "prepare": "npm run build",
+    "test": "mocha --require coffeescript/register --require jsdom-global/register test/**/*.coffee",
+    "demo": "npx serve . -l 8000"
+  },
+  "keywords": [
+    "pjax",
+    "ajax",
+    "navigation"
+  ],
+  "author": "dux",
+  "license": "MIT",
+  "devDependencies": {
+    "chai": "^4.4.1",
+    "coffeescript": "^2.7.0",
+    "esbuild": "^0.21.5",
+    "jsdom": "^24.0.0",
+    "jsdom-global": "^3.0.2",
+    "mocha": "^10.2.0",
+    "rimraf": "^5.0.5",
+    "serve": "^14.2.1"
+  }
+}

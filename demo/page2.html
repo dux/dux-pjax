@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax Demo · Page 2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/demo/styles.css" />
+    <script defer src="/dist/pjax.global.js"></script>
+  </head>
+  <body>
+    <div id="main" class="pjax">
+      <header style="height: 100px;">
+        <h1>dux-pjax demo</h1>
+        <nav>
+          <a href="/demo/index.html">Page 1</a>
+          <a href="/demo/page2.html">Page 2</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <h2>You are on Page 2</h2>
+          <p>Same layout, different content. Trigger <code>Pjax.load</code> to jump back.</p>
+          <p>Rendered at <span id="timestamp">--:--:--</span></p>
+          <button onclick="Pjax.load('/demo')">Load Page 1 (Pjax.load)</button>
+        </section>
+
+        <script>
+          requestAnimationFrame(function () {
+            var stamp = document.getElementById('timestamp');
+            if (stamp) stamp.textContent = new Date().toLocaleTimeString();
+          });
+        </script>
+      </main>
+    </div>
+  <body>
+</html>

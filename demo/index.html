@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax Demo · Page 1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/demo/styles.css" />
+    <script defer src="/dist/pjax.global.js"></script>
+  </head>
+  <body>
+    <div id="main" class="layout pjax">
+      <header style="height: 100px;">
+        <h1>dux-pjax demo</h1>
+        <nav>
+          <a href="/demo/index.html">Page 1</a>
+          <a href="/demo/page2.html">Page 2</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <h2>Welcome to Page 1</h2>
+          <p>This content is replaced via <code>Pjax.load()</code> without a full reload.</p>
+          <p>Rendered at <span id="timestamp"></span></p>
+          <button onclick="Pjax.load('/demo')">Re-load Page 1 &sdot; Pjax.load('/demo')</button>
+          <button onclick="Pjax.load('/demo/page2')">Load Page 2 &sdot; Pjax.load('/demo/demo2')</button>
+        </section>
+
+        <section class="widget">
+          <h3>Sidebar Widget</h3>
+          <p>Rendered at <span class="timestamp"></span></p>
+          <button onclick="Pjax.refresh('#sidebar')">Refresh Sidebar &sdot; Pjax.refresh('#sidebar')</button>
+        </section>
+
+        <section class="actions">
+          <h3>Global actions</h3>
+          <div class="buttons">
+            <button onclick="Pjax.refresh('#pjax')">Refresh Main &sdot; Pjax.refresh()</button>
+            <button onclick="Pjax.reload()">Force Reload &sdot; Pjax.reload()</button>
+          </div>
+        </section>
+
+        <script>
+          requestAnimationFrame(function () {
+            var now = new Date();
+            var ms = String(now.getMilliseconds()).padStart(3, '0');
+            var formatted = now.toLocaleTimeString() + '.' + ms;
+
+            var stamp = document.getElementById('timestamp');
+            if (stamp) stamp.textContent = formatted;
+
+            var parts = document.querySelectorAll('.timestamp');
+            parts.forEach(function (node) {
+              node.textContent = formatted;
+            });
+          });
+        </script>
+      </main>
+
+      <aside class="log" id="sidebar">
+        <h3>Event log</h3>
+        <div id="event-log"></div>
+        <br />
+        <button onclick="Pjax.refresh('#sidebar')">Refresh Log (Pjax.refresh)</button>
+        <script>
+          requestAnimationFrame(function () {
+            var log = document.getElementById('event-log');
+            log.innerHTML = 'Random sample: ' + Math.random().toFixed(5);
+          });
+        </script>
+      </aside>
+    </div>
+  </body>
+</html>
