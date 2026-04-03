@@ -1,6 +1,6 @@
 {
   "name": "dux-pjax",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "PJAX navigation helper for Dux applications.",
   "main": "dist/index.cjs",
   "module": "dist/index.js",

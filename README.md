@@ -25,7 +25,7 @@ The helper takes care of issuing the XMLHttpRequest, parsing inline scripts, dis
 - **Drop-in navigation** – call `Pjax.onDocumentClick()` once to hijack every link that should stay on the current page.
 - **Scoped refreshes** – target a specific DOM node via `Pjax.refresh('#sidebar')` or rely on `.ajax` regions for dialog/content updates.
 - **History-aware** – integrates with `window.history`, dispatches `pjax:render`, and caches responses for fast back-button support.
-- **Inline script support** – replays inline `<script>` tags (with optional `delay`/`// DELAY` hints) when new markup is inserted.
+- **Inline script support** – replays inline `<script>` tags (with optional `delay` attribute for deferred execution) when new markup is inserted.
 - **Scroll management** – preserves scroll position for refreshes, enforces top-of-page jumps for reloads, and exposes an opt-in view-transition mode.
 - **Form handling** – any `<form data-pjax="true">` (or target selector) automatically uses PJAX instead of a hard submit.
 
@@ -107,7 +107,7 @@ Pjax.reload()
 - `replacePath` – alternate URL to push to history once loading completes.
 
 ### DOM helpers and events
-- `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `delay` attribute or `// DELAY` marker).
+- `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `delay` attribute for deferred execution via `requestAnimationFrame`).
 - `Pjax.sendGlobalEvent()` emits `pjax:render` on `document` after a successful render.
 - The module keeps a small in-memory cache (`Pjax.historyData`) that powers instant back/forward restores.
 
@@ -128,11 +128,11 @@ npm test
 # Launch the browser demo
 npm run demo
 ```
-Tests live in `test/pjax.test.coffee` and cover option normalization, targeted refreshes, load/reload behavior, and script parsing.
+Tests live in `test/pjax.test.coffee` and cover module exports, option normalization, targeted refreshes, load/reload behavior, script parsing, lifecycle hooks, history management, and DOM updates.
 
 ## Project status
-- **Language**: Compiled JavaScript (CommonJS)
+- **Language**: CoffeeScript (compiled to JavaScript via esbuild)
 - **Entry points**: `dist/index.js` (ESM), `dist/index.cjs` (CJS), `dist/pjax.global.js` (browser global)
 - **License**: MIT
 
-Feel free to open issues or PRs if you need additional hooks or would like to help migrate to ESM/bundler-friendly builds.
+Feel free to open issues or PRs if you need additional hooks or improvements.

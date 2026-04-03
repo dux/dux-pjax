@@ -89,8 +89,9 @@ var require_onclick = __commonJS({
 // src/pjax.coffee
 var require_pjax = __commonJS({
   "src/pjax.coffee"(exports, module) {
-    var import_onclick = __toESM(require_onclick());
     var Pjax3;
+    var PjaxOnClick;
+    PjaxOnClick = require_onclick();
     Pjax3 = function() {
       class Pjax4 {
         // you have to call this if you want to capture clicks on document level
@@ -98,11 +99,11 @@ var require_pjax = __commonJS({
         static onDocumentClick() {
           if (!window.pjaxOnclickBinded) {
             window.pjaxOnclickBinded = true;
-            return window.addEventListener("click", import_onclick.default.main);
+            return window.addEventListener("click", PjaxOnClick.main);
           }
         }
         // base class method to load page
-        // istory: bool
+        // history: bool
         // scroll: bool
         // cache: bool
         // done: ()=>{...}
@@ -128,6 +129,7 @@ var require_pjax = __commonJS({
           opts.cache || (opts.cache = false);
           return this.fetch(opts);
         }
+        // returns true if the last two navigations were to the same URL (page was refreshed, not changed)
         static refreshed() {
           if (!this.pastHref) {
             return false;
@@ -185,7 +187,7 @@ var require_pjax = __commonJS({
           }
           if (opts.target) {
             if (typeof opts.target === "string") {
-              opts.target = document.querySelectorAll(opts.target)[0];
+              opts.target = document.querySelector(opts.target);
             }
             opts.node = opts.target;
             opts.scroll || (opts.scroll = false);
@@ -203,11 +205,12 @@ var require_pjax = __commonJS({
           }
           if (opts.replacePath) {
             if (opts.replacePath[0] === "?") {
-              opts.replacePath = location.pathname + path;
+              opts.replacePath = location.pathname + opts.replacePath;
             }
           }
           return opts;
         }
+        // creates a new Pjax instance with normalized opts and starts the XHR load
         static fetch(opts) {
           var pjax;
           pjax = new Pjax4(opts);
@@ -217,6 +220,8 @@ var require_pjax = __commonJS({
         static path() {
           return location.pathname + location.search;
         }
+        // finds the main pjax container DOM node (<pjax> tag or .pjax class)
+        // this is the element whose innerHTML gets replaced on navigation
         static node() {
           var el;
           el = document.getElementsByTagName("pjax")[0] || document.getElementsByClassName("pjax")[0] || alert(".pjax or #pjax not found");
@@ -225,6 +230,7 @@ var require_pjax = __commonJS({
           }
           return el;
         }
+        // debug logger - only outputs when not in silent mode (non-production ports)
         static console(msg) {
           if (!this.config.is_silent) {
             return console.log(msg);
@@ -232,7 +238,7 @@ var require_pjax = __commonJS({
         }
         // execute action before pjax load and do not proceed if return is false
         // example, load dialog links inside the dialog
-        // Pjax.before (href, opts) ->
+        // Pjax.before = (href, opts) ->
         //   if opts.node
         //     if opts.node.closest('.in-popup')
         //       Dialog.load href
@@ -249,6 +255,8 @@ var require_pjax = __commonJS({
         static error(msg) {
           return console.error(`Pjax error: ${msg}`);
         }
+        // executes a single inline script by id, then marks it as executed (text=1)
+        // img param is a trigger element (e.g. tracking pixel) that gets removed after firing
         static parseSingleScript(id, img) {
           var func, node;
           img.remove();
@@ -258,6 +266,10 @@ var require_pjax = __commonJS({
             return node.text = 1;
           }
         }
+        // finds and executes all inline <script> tags inside node (string or DOM element)
+        // skips external scripts (with src attribute) and non-javascript types
+        // scripts with 'delay' attribute are deferred via requestAnimationFrame
+        // returns the processed innerHTML
         static parseScripts(node) {
           var duplicate, func, i, len, ref, script_tag, type;
           if (typeof node === "string") {
@@ -304,27 +316,31 @@ var require_pjax = __commonJS({
           }
           return false;
         }
+        // returns the last loaded href, or the current path if no navigation happened yet
         static last() {
           return this.lastHref || this.path();
         }
+        // dispatches 'pjax:render' custom event on document so other code can react to page changes
         static sendGlobalEvent() {
           return document.dispatchEvent(new CustomEvent("pjax:render"));
         }
+        // push a new entry to browser history without triggering navigation
         static pushState(href) {
           return window.history.pushState({}, document.title, href);
         }
+        // alias for pushState
         static push(href) {
           return this.pushState(href);
         }
         // locks page scrolling to prevent jump to top of the page on refresh
-        static scrollLock(opts = {}) {
+        static scrollLock() {
           var body, now, scrollPosition;
           now = Date.now();
           if (this._scrollLockTime && now - this._scrollLockTime < 1e3) {
             return;
           }
           this._scrollLockTime = now;
-          scrollPosition = window.pageYOffset;
+          scrollPosition = window.scrollY;
           body = document.body;
           body.style.height = window.getComputedStyle(body).height;
           window.scrollTo(0, scrollPosition);
@@ -333,7 +349,10 @@ var require_pjax = __commonJS({
             return window.scrollTo(0, scrollPosition);
           });
         }
-        // prevert page flicker on refresh by fixing main node height
+        // prevent page flicker on refresh by fixing main node height
+        // replaces pjax container innerHTML with new content, updates document title,
+        // executes inline scripts, fires after() hook and 'pjax:render' event
+        // supports View Transitions API when Pjax.useViewTransition is set
         static setPageBody(node, href) {
           var new_body, pjaxNode, ref, title;
           title = (ref = node.querySelector("title")) != null ? ref.innerHTML : void 0;
@@ -352,8 +371,13 @@ var require_pjax = __commonJS({
             return Pjax4.sendGlobalEvent();
           }
         }
-        // sets or adds value to querystring
+        // gets or sets a querystring parameter and optionally triggers navigation
+        // getter: Pjax.qs('place') -> returns current value of ?place=...
+        // setter: Pjax.qs('place', 'ny') -> sets ?place=ny and triggers Pjax.load
         // Pjax.qs('place', el.name, { push: true })
+        // opts.push  - push to history without pjax load
+        // opts.mock  - push only, skip Pjax.push (for testing)
+        // opts.href  - return the new URL string instead of navigating
         static qs(key, value, opts = {}) {
           var data, href, parts, qs;
           parts = location.search.replace(/^\?/, "").split("&").map(function(el) {
@@ -379,9 +403,6 @@ var require_pjax = __commonJS({
             }).join("&");
             href = location.pathname + "?" + data;
             if (opts.push) {
-              if (opts.push) {
-                window.history.pushState({}, document.title, href);
-              }
               if (!opts.mock) {
                 return Pjax4.push(href);
               }
@@ -392,10 +413,13 @@ var require_pjax = __commonJS({
             }
           }
         }
+        // --- instance methods ---
+        // initialize with normalized options, extract the target href
         constructor(opts1) {
           this.opts = opts1;
           this.href = this.opts.href || this.opts.path;
         }
+        // fallback navigation - opens foreign URLs in new window, same-origin URLs via full page load
         redirect() {
           this.href || (this.href = location.href);
           if (this.href.slice(0, 4) === "http" && !this.href.includes(location.host)) {
@@ -405,7 +429,15 @@ var require_pjax = __commonJS({
           }
           return false;
         }
-        // load a new page
+        // main instance method - performs XHR GET to @href, handles:
+        // - cmd/ctrl+click -> open in new tab
+        // - before() hook -> can cancel navigation
+        // - hash-only links -> smooth scroll to anchor
+        // - external/hash/disabled links -> redirect() fallback
+        // - paths_to_skip config -> redirect() fallback
+        // - aborts any in-flight pjax request before starting new one
+        // - on success: injects response via applyLoadedData(), scrolls to top
+        // - on non-200: falls back to redirect()
         load() {
           var el, headers, i, k, len, node, ref, v;
           if (!this.href) {
@@ -457,7 +489,7 @@ var require_pjax = __commonJS({
                 }
             }
           }
-          this.opts.req_start_time = (/* @__PURE__ */ new Date()).getTime();
+          this.opts.req_start_time = Date.now();
           this.opts.path = this.href;
           headers = {};
           if (this.opts.cache === false) {
@@ -478,9 +510,10 @@ var require_pjax = __commonJS({
             this.req.setRequestHeader(k, v);
           }
           this.req.onload = (e) => {
-            var log_data, rul, time_diff;
+            var log_data, parsed, rul, time_diff;
+            Pjax4.request = null;
             this.response = this.req.responseText;
-            time_diff = (/* @__PURE__ */ new Date()).getTime() - this.opts.req_start_time;
+            time_diff = Date.now() - this.opts.req_start_time;
             log_data = `Pjax.load ${this.href}`;
             log_data += this.opts.history === false ? " (back trigger)" : "";
             Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
@@ -488,9 +521,8 @@ var require_pjax = __commonJS({
               return this.redirect();
             } else {
               if (rul = this.req.responseURL) {
-                this.href = rul.split("/");
-                this.href.splice(0, 3);
-                this.href = "/" + this.href.join("/");
+                parsed = new URL(rul);
+                this.href = parsed.pathname + parsed.search;
               }
               if (this.applyLoadedData()) {
                 if (typeof this.opts.done === "function") {
@@ -515,6 +547,12 @@ var require_pjax = __commonJS({
           this.req.send();
           return false;
         }
+        // injects the XHR response HTML into the page
+        // handles three modes:
+        //   1. opts.target - replace a specific DOM element by id match in response
+        //   2. opts.ajax_node - replace the closest .ajax container with matching response fragment
+        //   3. default - full pjax swap via setPageBody (replace main container, update title, run scripts)
+        // returns true on success, falsy on failure (triggers redirect fallback)
         applyLoadedData() {
           var ajax_data, ajax_id, ajax_node, id, ref, rtarget;
           this.pjaxNode = Pjax4.node();
@@ -572,18 +610,18 @@ var require_pjax = __commonJS({
       }
       ;
       Pjax4.config = {
-        // shoud Pjax log info to console
+        // should Pjax log info to console
         is_silent: parseInt(location.port) < 1e3,
         // do not scroll to top, use refresh() and not reload() on node with selectors
         no_scroll_selector: [".no-scroll"],
-        // skip pjax on followin links and do location.href = target
-        // you can add function, regexp of string (checks for starts with)
+        // skip pjax on following links and do location.href = target
+        // you can add function, regexp or string (checks for starts with)
         paths_to_skip: [],
-        // if link has any of this classes, Pjax will be skipped and link will be followed
+        // if link has any of these classes, Pjax will be skipped and link will be followed
         // Example: %a.direct{ href '/somewhere' } somewhere
         no_pjax_class: ["no-pjax", "direct"],
         no_ajax_class: ["ajax-skip", "skip-ajax", "no-ajax", "top"],
-        // if parent id found with ths class, ajax response data will be loaded in this class
+        // if parent id found with this class, ajax response data will be loaded in this class
         // you can add ID for better targeting. If no ID given to .ajax class
         //  * if response contains .ajax, first node found will be selected and it innerHTML will be used for replacement
         //  * if there is no .ajax in response, full page response will be used
@@ -614,18 +652,16 @@ var require_pjax = __commonJS({
     window.addEventListener("DOMContentLoaded", function() {
       setTimeout(Pjax3.sendGlobalEvent, 0);
       return document.body.addEventListener("submit", function(e) {
-        var form, is_pjax, target;
+        var form, is_pjax, pjax_target;
         form = e.target;
         if (is_pjax = form.getAttribute("data-pjax")) {
           e.preventDefault();
-          target = is_pjax === "true" ? null : target;
+          pjax_target = is_pjax === "true" ? null : is_pjax;
           return Pjax3.load(form.getAttribute("action"), {
             form,
-            target
+            target: pjax_target
           });
         }
-      }, {
-        once: true
       });
     });
     if (typeof module !== "undefined" && module.exports) {
