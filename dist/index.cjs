@@ -36,7 +36,7 @@ var require_onclick = __commonJS({
     PjaxOnClick = {
       main: function(event2) {
         var click, el, func, href, hxNode, hxTarget, i, klass, len, node, ref;
-        if (node = event2.target.closest("*[click], *[href]")) {
+        if (node = event2.target.closest('*[click]:not([click=""]), *[href]:not([href=""])')) {
           event2.stopPropagation();
           event2.preventDefault();
           if (click = node.getAttribute("click")) {
@@ -53,7 +53,7 @@ var require_onclick = __commonJS({
             }
             if (href.slice(0, 2) === "//") {
               href = href.replace("/", "");
-              return window.open(href);
+              return window.open(window.location.origin + href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
             }
             if (event2.which === 2 || event2.metaKey) {
               return window.open(href);
@@ -76,9 +76,6 @@ var require_onclick = __commonJS({
             }
             if (/^\w/.test(href) || node.getAttribute("target")) {
               return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
-            }
-            if (/^\/\//.test(href)) {
-              return window.open(window.location.origin + href.replace("/", ""), node.getAttribute("target") || href.replace(/[^\w]/g, ""));
             }
             Pjax.load(href, {
               ajax: node
@@ -104,7 +101,10 @@ var require_pjax = __commonJS({
         // you have to call this if you want to capture clicks on document level
         // Example: Pjax.onDocumentClick()
         static onDocumentClick() {
-          return document.addEventListener("click", import_onclick.default.main);
+          if (!window.pjaxOnclickBinded) {
+            window.pjaxOnclickBinded = true;
+            return window.addEventListener("click", import_onclick.default.main);
+          }
         }
         // base class method to load page
         // istory: bool
@@ -282,8 +282,12 @@ var require_pjax = __commonJS({
                     script_tag.id = `app-sc-${++this.script_cnt}`;
                   }
                   func = new Function(script_tag.textContent);
-                  func();
                   script_tag.text = 1;
+                  if (script_tag.getAttribute("delay")) {
+                    requestAnimationFrame(func);
+                  } else {
+                    func();
+                  }
                 }
               }
             }
@@ -399,7 +403,7 @@ var require_pjax = __commonJS({
         }
         redirect() {
           this.href || (this.href = location.href);
-          if (this.href[0] === "h" && !this.href.includes(location.host)) {
+          if (this.href.slice(0, 4) === "http" && !this.href.includes(location.host)) {
             window.open(this.href);
           } else {
             location.href = this.href;

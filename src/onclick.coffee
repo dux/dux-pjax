@@ -4,7 +4,7 @@ PjaxOnClick =
     # if you do not want parent onclick to trigger when using href, use "click" attribute on parent
     # %tr{ click: ""... }
     #   %td{ href: "/..." }
-    if node = event.target.closest('*[click], *[href]')
+    if node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""])')
       event.stopPropagation()
       event.preventDefault()
 
@@ -24,7 +24,7 @@ PjaxOnClick =
 
         if href.slice(0, 2) == '//'
           href = href.replace '/', ''
-          return window.open href
+          return window.open(window.location.origin + href, node.getAttribute('target') || href.replace(/[^\w]/g, ''))
 
         # if ctrl or cmd button is pressed, open in new window
         if event.which == 2 || event.metaKey
@@ -50,10 +50,6 @@ PjaxOnClick =
         # if target attribute provided, open in new window
         if /^\w/.test(href) || node.getAttribute('target')
           return window.open(href, node.getAttribute('target') || href.replace(/[^\w]/g, ''))
-
-        # if double slash start
-        if /^\/\//.test(href)
-          return window.open(window.location.origin + href.replace('/', ''), node.getAttribute('target') || href.replace(/[^\w]/g, ''))
 
         # if everything else fails, call Pjax
         Pjax.load href, ajax: node

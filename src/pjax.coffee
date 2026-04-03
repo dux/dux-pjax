@@ -70,7 +70,9 @@ class Pjax
   # you have to call this if you want to capture clicks on document level
   # Example: Pjax.onDocumentClick()
   @onDocumentClick: ->
-    document.addEventListener 'click', PjaxOnClick.main
+    unless window.pjaxOnclickBinded
+      window.pjaxOnclickBinded = true
+      window.addEventListener 'click', PjaxOnClick.main
 
   # base class method to load page
   # istory: bool
@@ -231,9 +233,14 @@ class Pjax
               @script_cnt ||= 0
               script_tag.id = "app-sc-#{++@script_cnt}"
 
+            # never remove this, must no be requestAnimationFrame by default
+            # why? if you set window.app.user = {...} you want nodes inserted that are fast rendered, to have this info
             func = new Function(script_tag.textContent)
-            func()
             script_tag.text = 1
+            if script_tag.getAttribute('delay')
+              requestAnimationFrame(func)
+            else
+              func()
 
     node.innerHTML
 
@@ -279,10 +286,6 @@ class Pjax
     Pjax.scrollLock()
     pjaxNode = Pjax.node()
     if new_body = node.querySelector('#' + pjaxNode.id)
-      # this has to be before data insert, because maybe we want to insert some JS that inserted nodes expect to be present
-      # if you need to delay execution of some code untill html is inserted, use this
-      #   window.requestAnimationFrame( ()=>...) ) or add comment // DELAY in inline js
-
       if Pjax.useViewTransition && document.startViewTransition
         document.startViewTransition () =>
           pjaxNode.innerHTML = Pjax.parseScripts(new_body)
@@ -326,7 +329,7 @@ class Pjax
   redirect: ->
     @href ||= location.href
 
-    if @href[0] == 'h' && !@href.includes(location.host)
+    if @href.slice(0, 4) == 'http' && !@href.includes(location.host)
       # if page is on a foreign server, open it in new window
       window.open @href
     else
@@ -398,7 +401,7 @@ class Pjax
     @req.onload = (e) =>
       @response  = @req.responseText
 
-      # console log
+       # console log
       time_diff = (new Date()).getTime() - @opts.req_start_time
       log_data  = "Pjax.load #{@href}"
       log_data += if @opts.history == false then ' (back trigger)' else ''
