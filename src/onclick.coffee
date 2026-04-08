@@ -48,7 +48,10 @@ PjaxOnClick =
         # return if /bot|googlebot|crawler|spider|robot|crawling/i.test(navigator.userAgent)
 
         # if target attribute provided, open in new window
+        # vscode: protocol should open in current window, not a new one
         if /^\w/.test(href) || node.getAttribute('target')
+          if /^vscode:/.test(href)
+            return window.location.href = href
           return window.open(href, node.getAttribute('target') || href.replace(/[^\w]/g, ''))
 
         # if everything else fails, call Pjax

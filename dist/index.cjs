@@ -75,6 +75,9 @@ var require_onclick = __commonJS({
               return func();
             }
             if (/^\w/.test(href) || node.getAttribute("target")) {
+              if (/^vscode:/.test(href)) {
+                return window.location.href = href;
+              }
               return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
             }
             Pjax.load(href, {
@@ -145,6 +148,11 @@ var require_pjax = __commonJS({
         static getOpts(path, opts) {
           var ajax_node, ajax_path, el, i, key, len, ref, ref1, skip_ajax, value;
           opts || (opts = {});
+          if (typeof opts === "string") {
+            opts = {
+              target: opts
+            };
+          }
           if (typeof path === "object") {
             if (path.nodeName) {
               opts.ajax = path;

@@ -114,6 +114,9 @@ class Pjax
   @getOpts = (path, opts) ->
     opts ||= {}
 
+    if typeof(opts) == 'string'
+      opts = target: opts
+
     if typeof(path) == 'object'
       if path.nodeName
         opts.ajax = path
