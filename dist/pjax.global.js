@@ -31,58 +31,57 @@ var Pjax;
     "src/onclick.coffee"(exports, module) {
       var PjaxOnClick;
       PjaxOnClick = {
-        main: function(event2) {
-          var click, el, func, href, hxNode, hxTarget, i, klass, len, node, ref;
-          if (node = event2.target.closest('*[click]:not([click=""]), *[href]:not([href=""])')) {
-            event2.stopPropagation();
-            event2.preventDefault();
-            if (click = node.getAttribute("click")) {
-              return new Function(click).bind(node)();
-            } else {
-              href = node.getAttribute("href");
-              if (hxTarget = node.getAttribute("hx-target")) {
-                if (hxNode = document.querySelectorAll(hxTarget)[0]) {
-                  Pjax.load(href, {
-                    target: hxNode
-                  });
-                  return;
-                }
-              }
-              if (href.slice(0, 2) === "//") {
-                href = href.replace("/", "");
-                return window.open(window.location.origin + href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
-              }
-              if (event2.which === 2 || event2.metaKey) {
-                return window.open(href);
-              }
-              klass = " " + node.className + " ";
-              ref = Pjax.config.no_pjax_class;
-              for (i = 0, len = ref.length; i < len; i++) {
-                el = ref[i];
-                if (klass.includes(` ${el} `)) {
-                  if (/^http/.test(href)) {
-                    window.open(href);
-                  } else {
-                    return window.location.href = href;
-                  }
-                }
-              }
-              if (/^javascript:/.test(href)) {
-                func = new Function(href.replace(/^javascript:/, ""));
-                return func();
-              }
-              if (/^\w/.test(href) || node.getAttribute("target")) {
-                if (/^vscode:/.test(href)) {
-                  return window.location.href = href;
-                }
-                return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
-              }
+        main: function(event) {
+          var click, el, href, hxNode, hxTarget, i, len, node, ref;
+          node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""])');
+          if (!node) {
+            return;
+          }
+          event.stopPropagation();
+          event.preventDefault();
+          if (click = node.getAttribute("click")) {
+            return new Function(click).bind(node)();
+          }
+          href = node.getAttribute("href");
+          if (hxTarget = node.getAttribute("hx-target")) {
+            if (hxNode = document.querySelector(hxTarget)) {
               Pjax.load(href, {
-                ajax: node
+                target: hxNode
               });
-              return false;
+              return;
             }
           }
+          if (href.slice(0, 2) === "//") {
+            href = href.replace("/", "");
+            return window.open(window.location.origin + href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
+          }
+          if (event.which === 2 || event.metaKey) {
+            return window.open(href);
+          }
+          ref = Pjax.config.no_pjax_class;
+          for (i = 0, len = ref.length; i < len; i++) {
+            el = ref[i];
+            if (node.classList.contains(el)) {
+              if (/^http/.test(href)) {
+                return window.open(href);
+              } else {
+                return window.location.href = href;
+              }
+            }
+          }
+          if (/^javascript:/.test(href)) {
+            return new Function(href.replace(/^javascript:/, ""))();
+          }
+          if (/^\w/.test(href) || node.getAttribute("target")) {
+            if (/^vscode:/.test(href)) {
+              return window.location.href = href;
+            }
+            return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
+          }
+          Pjax.load(href, {
+            ajax: node
+          });
+          return false;
         }
       };
       if (typeof module !== "undefined" && module.exports) {
@@ -99,51 +98,97 @@ var Pjax;
       PjaxOnClick = require_onclick();
       Pjax3 = function() {
         class Pjax4 {
-          // you have to call this if you want to capture clicks on document level
-          // Example: Pjax.onDocumentClick()
+          // --- public class methods ---
           static onDocumentClick() {
-            if (!window.pjaxOnclickBinded) {
-              window.pjaxOnclickBinded = true;
+            if (!this._clickBound) {
+              this._clickBound = true;
               return window.addEventListener("click", PjaxOnClick.main);
             }
           }
-          // base class method to load page
-          // history: bool
-          // scroll: bool
-          // cache: bool
-          // done: ()=>{...}
           static load(href, opts) {
-            opts = this.getOpts(href, opts);
-            return this.fetch(opts);
+            return this.fetch(this.getOpts(href, opts));
           }
-          // refresh page, keep scroll
           static refresh(func, opts) {
             if (typeof func === "string" && func[0] === "#") {
               opts || (opts = {});
               opts.target = func;
-              func = Pjax4.path();
+              func = this.path();
               opts.history = false;
             }
             opts = this.getOpts(func, opts);
             opts.scroll || (opts.scroll = false);
             return this.fetch(opts);
           }
-          // reload, jump to top, no_cache http request forced
           static reload(opts) {
             opts = this.getOpts(opts);
             opts.cache || (opts.cache = false);
             return this.fetch(opts);
           }
-          // returns true if the last two navigations were to the same URL (page was refreshed, not changed)
           static refreshed() {
             if (!this.pastHref) {
               return false;
             }
             return this.pastHref === this.lastHref;
           }
-          // normalize options
+          static path() {
+            return location.pathname + location.search;
+          }
+          static last() {
+            return this.lastHref || this.path();
+          }
+          static node() {
+            var el;
+            el = document.getElementsByTagName("pjax")[0] || document.getElementsByClassName("pjax")[0];
+            if (!el) {
+              this.error(".pjax or <pjax> not found");
+              return;
+            }
+            if (el.nodeName === "BODY") {
+              this.error("You cant bind PJAX to body");
+              return;
+            }
+            return el;
+          }
+          static console(msg) {
+            if (!this.config.is_silent) {
+              return console.log(msg);
+            }
+          }
+          static before() {
+            return true;
+          }
+          static after() {
+            return true;
+          }
+          static error(msg) {
+            return console.error(`Pjax error: ${msg}`);
+          }
+          static push(href) {
+            return window.history.pushState({}, document.title, href);
+          }
+          static pushState(href) {
+            return this.push(href);
+          }
+          static replace(href) {
+            return window.history.replaceState({}, document.title, href);
+          }
+          static sendGlobalEvent() {
+            return document.dispatchEvent(new CustomEvent("pjax:render"));
+          }
+          // --- option normalization ---
           static getOpts(path, opts) {
-            var ajax_node, ajax_path, el, i, key, len, ref, ref1, skip_ajax, value;
+            opts = this._resolveArgs(path, opts);
+            if (opts.ajax) {
+              this._resolveAjax(opts);
+            }
+            if (opts.target) {
+              this._resolveTarget(opts);
+            }
+            this._resolvePath(opts);
+            return opts;
+          }
+          static _resolveArgs(path, opts) {
+            var key, ref, value;
             opts || (opts = {});
             if (typeof opts === "string") {
               opts = {
@@ -174,34 +219,39 @@ var Pjax;
                 opts.path += `${key}=${encodeURIComponent(value)}`;
               }
             }
-            if (opts.ajax) {
-              opts.node = opts.ajax;
-              if (typeof opts.node === "string") {
-                opts.node = document.querySelector(opts.node);
-              }
-              skip_ajax = false;
-              ref1 = this.config.no_ajax_class;
-              for (i = 0, len = ref1.length; i < len; i++) {
-                el = ref1[i];
-                if (opts.ajax.closest(`.${el}`)) {
-                  skip_ajax = true;
-                }
-              }
-              if (!skip_ajax) {
-                if (ajax_node = opts.node.closest(Pjax4.config.ajax_selector)) {
-                  opts.ajax_node = ajax_node;
-                  opts.scroll || (opts.scroll = false);
-                }
-              }
-              delete opts.ajax;
+            return opts;
+          }
+          static _resolveAjax(opts) {
+            var ajax_node, el, i, len, ref, skip;
+            opts.node = opts.ajax;
+            if (typeof opts.node === "string") {
+              opts.node = document.querySelector(opts.node);
             }
-            if (opts.target) {
-              if (typeof opts.target === "string") {
-                opts.target = document.querySelector(opts.target);
+            skip = false;
+            ref = this.config.no_ajax_class;
+            for (i = 0, len = ref.length; i < len; i++) {
+              el = ref[i];
+              if (opts.ajax.closest(`.${el}`)) {
+                skip = true;
               }
-              opts.node = opts.target;
-              opts.scroll || (opts.scroll = false);
             }
+            if (!skip) {
+              if (ajax_node = opts.node.closest(this.config.ajax_selector)) {
+                opts.ajax_node = ajax_node;
+                opts.scroll || (opts.scroll = false);
+              }
+            }
+            return delete opts.ajax;
+          }
+          static _resolveTarget(opts) {
+            if (typeof opts.target === "string") {
+              opts.target = document.querySelector(opts.target);
+            }
+            opts.node = opts.target;
+            return opts.scroll || (opts.scroll = false);
+          }
+          static _resolvePath(opts) {
+            var ajax_path;
             if (opts.path[0] === "?") {
               if (opts.ajax_node) {
                 ajax_path = opts.ajax_node.getAttribute("data-path") || opts.ajax_node.getAttribute("path");
@@ -213,106 +263,12 @@ var Pjax;
                 opts.path = location.pathname + opts.path;
               }
             }
-            if (opts.replacePath) {
-              if (opts.replacePath[0] === "?") {
-                opts.replacePath = location.pathname + opts.replacePath;
-              }
-            }
-            return opts;
-          }
-          // creates a new Pjax instance with normalized opts and starts the XHR load
-          static fetch(opts) {
-            var pjax;
-            pjax = new Pjax4(opts);
-            return pjax.load();
-          }
-          // used to get full page path
-          static path() {
-            return location.pathname + location.search;
-          }
-          // finds the main pjax container DOM node (<pjax> tag or .pjax class)
-          // this is the element whose innerHTML gets replaced on navigation
-          static node() {
-            var el;
-            el = document.getElementsByTagName("pjax")[0] || document.getElementsByClassName("pjax")[0] || alert(".pjax or #pjax not found");
-            if (el.nodeName === "BODY") {
-              alert("You cant bind PJAX to body");
-            }
-            return el;
-          }
-          // debug logger - only outputs when not in silent mode (non-production ports)
-          static console(msg) {
-            if (!this.config.is_silent) {
-              return console.log(msg);
+            if (opts.replacePath && opts.replacePath[0] === "?") {
+              return opts.replacePath = location.pathname + opts.replacePath;
             }
           }
-          // execute action before pjax load and do not proceed if return is false
-          // example, load dialog links inside the dialog
-          // Pjax.before = (href, opts) ->
-          //   if opts.node
-          //     if opts.node.closest('.in-popup')
-          //       Dialog.load href
-          //       return false
-          //   true
-          static before() {
-            return true;
-          }
-          // execute action after pjax load
-          static after() {
-            return true;
-          }
-          // error logger, replace as fitting
-          static error(msg) {
-            return console.error(`Pjax error: ${msg}`);
-          }
-          // executes a single inline script by id, then marks it as executed (text=1)
-          // img param is a trigger element (e.g. tracking pixel) that gets removed after firing
-          static parseSingleScript(id, img) {
-            var func, node;
-            img.remove();
-            if (node = document.getElementById(id)) {
-              func = new Function(node.innerText);
-              func();
-              return node.text = 1;
-            }
-          }
-          // finds and executes all inline <script> tags inside node (string or DOM element)
-          // skips external scripts (with src attribute) and non-javascript types
-          // scripts with 'delay' attribute are deferred via requestAnimationFrame
-          // returns the processed innerHTML
-          static parseScripts(node) {
-            var duplicate, func, i, len, ref, script_tag, type;
-            if (typeof node === "string") {
-              duplicate = node;
-              node = document.createElement("div");
-              node.innerHTML = duplicate;
-            }
-            ref = node.getElementsByTagName("script");
-            for (i = 0, len = ref.length; i < len; i++) {
-              script_tag = ref[i];
-              if (script_tag) {
-                if (!script_tag.getAttribute("src")) {
-                  type = script_tag.getAttribute("type") || "javascript";
-                  if (type.indexOf("javascript") > -1) {
-                    if (!script_tag.id) {
-                      this.script_cnt || (this.script_cnt = 0);
-                      script_tag.id = `app-sc-${++this.script_cnt}`;
-                    }
-                    func = new Function(script_tag.textContent);
-                    script_tag.text = 1;
-                    if (script_tag.getAttribute("delay")) {
-                      requestAnimationFrame(func);
-                    } else {
-                      func();
-                    }
-                  }
-                }
-              }
-            }
-            return node.innerHTML;
-          }
-          // internal
-          static noScrollCheck(node) {
+          // --- scroll management ---
+          static shouldSkipScroll(node) {
             var el, i, len, ref;
             if (!(node && node.closest)) {
               return;
@@ -326,23 +282,6 @@ var Pjax;
             }
             return false;
           }
-          // returns the last loaded href, or the current path if no navigation happened yet
-          static last() {
-            return this.lastHref || this.path();
-          }
-          // dispatches 'pjax:render' custom event on document so other code can react to page changes
-          static sendGlobalEvent() {
-            return document.dispatchEvent(new CustomEvent("pjax:render"));
-          }
-          // push a new entry to browser history without triggering navigation
-          static pushState(href) {
-            return window.history.pushState({}, document.title, href);
-          }
-          // alias for pushState
-          static push(href) {
-            return this.pushState(href);
-          }
-          // locks page scrolling to prevent jump to top of the page on refresh
           static scrollLock() {
             var body, now, scrollPosition;
             now = Date.now();
@@ -359,37 +298,81 @@ var Pjax;
               return window.scrollTo(0, scrollPosition);
             });
           }
-          // prevent page flicker on refresh by fixing main node height
-          // replaces pjax container innerHTML with new content, updates document title,
-          // executes inline scripts, fires after() hook and 'pjax:render' event
-          // supports View Transitions API when Pjax.useViewTransition is set
+          // --- page rendering ---
           static setPageBody(node, href) {
             var new_body, pjaxNode, ref, title;
             title = (ref = node.querySelector("title")) != null ? ref.innerHTML : void 0;
             document.title = title || "no page title (pjax)";
-            Pjax4.scrollLock();
-            pjaxNode = Pjax4.node();
+            this.scrollLock();
+            pjaxNode = this.node();
+            if (!pjaxNode) {
+              return;
+            }
             if (new_body = node.querySelector("#" + pjaxNode.id)) {
-              if (Pjax4.useViewTransition && document.startViewTransition) {
+              if (this.useViewTransition && document.startViewTransition) {
                 document.startViewTransition(() => {
-                  return pjaxNode.innerHTML = Pjax4.parseScripts(new_body);
+                  return this.morphInto(pjaxNode, this.parseScripts(new_body));
                 });
               } else {
-                pjaxNode.innerHTML = Pjax4.parseScripts(new_body);
+                this.morphInto(pjaxNode, this.parseScripts(new_body));
               }
-              Pjax4.after(href, this.opts);
-              return Pjax4.sendGlobalEvent();
+              this.after(href, this.opts);
+              return this.sendGlobalEvent();
             }
           }
-          // gets or sets a querystring parameter and optionally triggers navigation
-          // getter: Pjax.qs('place') -> returns current value of ?place=...
-          // setter: Pjax.qs('place', 'ny') -> sets ?place=ny and triggers Pjax.load
-          // Pjax.qs('place', el.name, { push: true })
-          // opts.push  - push to history without pjax load
-          // opts.mock  - push only, skip Pjax.push (for testing)
-          // opts.href  - return the new URL string instead of navigating
+          static morphInto(target, html) {
+            var ref;
+            if ((ref = window.Fez) != null ? ref.nodeMorph : void 0) {
+              return window.Fez.nodeMorph(target, html);
+            } else {
+              return target.innerHTML = html;
+            }
+          }
+          static parseSingleScript(id, img) {
+            var node;
+            img.remove();
+            if (node = document.getElementById(id)) {
+              new Function(node.textContent)();
+              return node.text = 1;
+            }
+          }
+          static parseScripts(node) {
+            var div, func, i, len, ref, script_tag, type;
+            if (typeof node === "string") {
+              div = document.createElement("div");
+              div.innerHTML = node;
+              node = div;
+            }
+            ref = node.getElementsByTagName("script");
+            for (i = 0, len = ref.length; i < len; i++) {
+              script_tag = ref[i];
+              if (!script_tag) {
+                continue;
+              }
+              if (script_tag.getAttribute("src")) {
+                continue;
+              }
+              type = script_tag.getAttribute("type") || "javascript";
+              if (!type.includes("javascript")) {
+                continue;
+              }
+              if (!script_tag.id) {
+                this.script_cnt || (this.script_cnt = 0);
+                script_tag.id = `app-sc-${++this.script_cnt}`;
+              }
+              func = new Function(script_tag.textContent);
+              script_tag.text = 1;
+              if (script_tag.getAttribute("delay")) {
+                requestAnimationFrame(func);
+              } else {
+                func();
+              }
+            }
+            return node.innerHTML;
+          }
+          // --- querystring helper ---
           static qs(key, value, opts = {}) {
-            var data, href, parts, qs;
+            var data, href, parts, qs, remaining;
             parts = location.search.replace(/^\?/, "").split("&").map(function(el) {
               return el.split("=", 2);
             });
@@ -407,29 +390,55 @@ var Pjax;
                   return qs[el[0]] = el[1];
                 }
               });
-              qs[key] = encodeURIComponent(value);
-              data = Object.keys(qs).map((key2) => {
-                return `${key2}=${qs[key2]}`;
-              }).join("&");
-              href = location.pathname + "?" + data;
+              if (value === null || value === false) {
+                delete qs[key];
+              } else {
+                qs[key] = encodeURIComponent(value);
+              }
+              remaining = Object.keys(qs);
+              if (remaining.length) {
+                data = remaining.map((k) => {
+                  return `${k}=${qs[k]}`;
+                }).join("&");
+                href = location.pathname + "?" + data;
+              } else {
+                href = location.pathname;
+              }
               if (opts.push) {
                 if (!opts.mock) {
-                  return Pjax4.push(href);
+                  return this.push(href);
                 }
               } else if (opts.href) {
                 return href;
               } else {
-                return Pjax4.load(href);
+                return this.load(href);
               }
             }
           }
+          // --- history management ---
+          static _addHistoryEntry(html) {
+            var keys, max;
+            keys = Object.keys(this.historyData);
+            max = this.config.history_max || 20;
+            if (keys.length >= max) {
+              delete this.historyData[keys[0]];
+            }
+            return this.historyData[this.path()] = {
+              html,
+              scrollY: 0
+            };
+          }
+          // --- internal ---
+          static fetch(opts) {
+            var pjax;
+            pjax = new Pjax4(opts);
+            return pjax.load();
+          }
           // --- instance methods ---
-          // initialize with normalized options, extract the target href
           constructor(opts1) {
             this.opts = opts1;
             this.href = this.opts.href || this.opts.path;
           }
-          // fallback navigation - opens foreign URLs in new window, same-origin URLs via full page load
           redirect() {
             this.href || (this.href = location.href);
             if (this.href.slice(0, 4) === "http" && !this.href.includes(location.host)) {
@@ -439,23 +448,24 @@ var Pjax;
             }
             return false;
           }
-          // main instance method - performs XHR GET to @href, handles:
-          // - cmd/ctrl+click -> open in new tab
-          // - before() hook -> can cancel navigation
-          // - hash-only links -> smooth scroll to anchor
-          // - external/hash/disabled links -> redirect() fallback
-          // - paths_to_skip config -> redirect() fallback
-          // - aborts any in-flight pjax request before starting new one
-          // - on success: injects response via applyLoadedData(), scrolls to top
-          // - on non-200: falls back to redirect()
           load() {
-            var el, headers, i, k, len, node, ref, v;
+            var currentEntry, e, el, i, len, node, now, ref;
             if (!this.href) {
               return false;
             }
+            now = Date.now();
+            if (Pjax4.lastHref === this.href && now - (Pjax4._lastLoadTime || 0) < 2e3) {
+              return false;
+            }
+            Pjax4._lastLoadTime = now;
+            currentEntry = Pjax4.historyData[Pjax4.path()];
+            if (currentEntry) {
+              currentEntry.scrollY = window.scrollY;
+            }
             Pjax4.pastHref = Pjax4.lastHref;
             Pjax4.lastHref = this.href;
-            if (event && !event.key && (event.which === 2 || event.metaKey)) {
+            e = window.event;
+            if (e && !e.key && (e.which === 2 || e.metaKey)) {
               return window.open(this.href);
             }
             if (Pjax4.before(this.href, this.opts) === false) {
@@ -499,109 +509,127 @@ var Pjax;
                   }
               }
             }
-            this.opts.req_start_time = Date.now();
-            this.opts.path = this.href;
-            headers = {};
-            if (this.opts.cache === false) {
-              headers["cache-control"] = "no-cache";
-            }
-            headers["x-requested-with"] = "XMLHttpRequest";
             if (Pjax4.request) {
               Pjax4.request.abort();
             }
+            this.sendRequest();
+            return false;
+          }
+          sendRequest() {
+            var headers, k, v;
+            document.dispatchEvent(new CustomEvent("pjax:start"));
+            this.opts.req_start_time = Date.now();
+            this.opts.path = this.href;
+            headers = {
+              "x-requested-with": "XMLHttpRequest"
+            };
+            if (this.opts.cache === false) {
+              headers["cache-control"] = "no-cache";
+            }
             Pjax4.request = this.req = new XMLHttpRequest();
+            this.req.timeout = Pjax4.config.timeout || 1e4;
             this.req.onerror = function(e) {
               Pjax4.error("Net error: Server response not received (Pjax)");
               return console.error(e);
+            };
+            this.req.ontimeout = () => {
+              Pjax4.request = null;
+              Pjax4.error(`Request timeout: ${this.href}`);
+              return this.redirect();
             };
             this.req.open("GET", this.href);
             for (k in headers) {
               v = headers[k];
               this.req.setRequestHeader(k, v);
             }
-            this.req.onload = (e) => {
-              var log_data, parsed, rul, time_diff;
-              Pjax4.request = null;
-              this.response = this.req.responseText;
-              time_diff = Date.now() - this.opts.req_start_time;
-              log_data = `Pjax.load ${this.href}`;
-              log_data += this.opts.history === false ? " (back trigger)" : "";
-              Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
-              if (this.req.status !== 200) {
-                return this.redirect();
-              } else {
-                if (rul = this.req.responseURL) {
-                  parsed = new URL(rul);
-                  this.href = parsed.pathname + parsed.search;
-                }
-                if (this.applyLoadedData()) {
-                  if (typeof this.opts.done === "function") {
-                    this.opts.done();
-                  }
-                  if (!(this.opts.scroll === false || Pjax4.noScrollCheck(this.opts.node))) {
-                    return window.requestAnimationFrame(function() {
-                      return window.scrollTo({
-                        top: 0,
-                        left: 0,
-                        behavior: "smooth"
-                      });
-                    });
-                  } else {
-                    return Pjax4.scrollLock();
-                  }
-                } else {
-                  return this.redirect();
-                }
-              }
+            this.req.onload = () => {
+              return this.handleResponse();
             };
-            this.req.send();
-            return false;
+            return this.req.send();
           }
-          // injects the XHR response HTML into the page
-          // handles three modes:
-          //   1. opts.target - replace a specific DOM element by id match in response
-          //   2. opts.ajax_node - replace the closest .ajax container with matching response fragment
-          //   3. default - full pjax swap via setPageBody (replace main container, update title, run scripts)
-          // returns true on success, falsy on failure (triggers redirect fallback)
+          handleResponse() {
+            var log_data, parsed, rul, time_diff;
+            Pjax4.request = null;
+            this.response = this.req.responseText;
+            time_diff = Date.now() - this.opts.req_start_time;
+            log_data = `Pjax.load ${this.href}`;
+            if (this.opts.history === false) {
+              log_data += " (back trigger)";
+            }
+            Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
+            if (this.req.status !== 200) {
+              return this.redirect();
+            }
+            if (rul = this.req.responseURL) {
+              parsed = new URL(rul);
+              this.href = parsed.pathname + parsed.search;
+            }
+            if (!this.applyLoadedData()) {
+              return this.redirect();
+            }
+            if (typeof this.opts.done === "function") {
+              this.opts.done();
+            }
+            if (!(this.opts.scroll === false || Pjax4.shouldSkipScroll(this.opts.node))) {
+              return window.requestAnimationFrame(function() {
+                return window.scrollTo({
+                  top: 0,
+                  left: 0,
+                  behavior: "smooth"
+                });
+              });
+            } else {
+              return Pjax4.scrollLock();
+            }
+          }
           applyLoadedData() {
-            var ajax_data, ajax_id, ajax_node, id, ref, rtarget;
             this.pjaxNode = Pjax4.node();
             if (!this.pjaxNode) {
-              Pjax4.error("template_id mismatch, full page load (use no-pjax as a class name)");
               return;
             }
             if (!this.pjaxNode.id) {
-              alert("No ID attribute on pjax node");
-              return;
+              return Pjax4.error("No ID attribute on pjax node");
             }
             this.historyAddCurrent(this.opts.replacePath || this.href);
             this.rroot = document.createElement("div");
             this.rroot.innerHTML = this.response;
-            if (this.opts.target) {
-              if (id = this.opts.target.getAttribute("id")) {
-                rtarget = this.rroot.querySelector("#" + id);
-                if (rtarget) {
-                  Pjax4.scrollLock();
-                  this.opts.target.innerHTML = Pjax4.parseScripts(rtarget.innerHTML);
-                  return true;
-                }
-              } else {
-                alert("ID attribute not found on Pjax target");
-              }
-            }
-            if (ajax_node = this.opts.ajax_node) {
-              ajax_node.setAttribute("data-path", this.href);
-              ajax_node.removeAttribute("path");
-              ajax_id = ajax_node.getAttribute("id") || alert("Pjax .ajax node has no ID");
-              ajax_data = ((ref = this.rroot.querySelector("#" + ajax_id)) != null ? ref.innerHTML : void 0) || this.response;
-              ajax_node.innerHTML = Pjax4.parseScripts(ajax_data);
+            if (this.opts.target && this.applyTarget()) {
               return true;
             }
-            Pjax4.historyData[Pjax4.path()] = this.response;
+            if (this.opts.ajax_node) {
+              return this.applyAjax();
+            }
+            return this.applyFullSwap();
+          }
+          applyTarget() {
+            var id, rtarget;
+            id = this.opts.target.getAttribute("id");
+            if (!id) {
+              Pjax4.error("ID attribute not found on Pjax target");
+              return false;
+            }
+            rtarget = this.rroot.querySelector("#" + id);
+            if (!rtarget) {
+              return false;
+            }
+            Pjax4.scrollLock();
+            Pjax4.morphInto(this.opts.target, Pjax4.parseScripts(rtarget.innerHTML));
+            return true;
+          }
+          applyAjax() {
+            var ajax_data, ajax_id, ajax_node, ref;
+            ajax_node = this.opts.ajax_node;
+            ajax_node.setAttribute("data-path", this.href);
+            ajax_node.removeAttribute("path");
+            ajax_id = ajax_node.getAttribute("id") || Pjax4.error("Pjax .ajax node has no ID");
+            ajax_data = ((ref = this.rroot.querySelector("#" + ajax_id)) != null ? ref.innerHTML : void 0) || this.response;
+            Pjax4.morphInto(ajax_node, Pjax4.parseScripts(ajax_data));
+            return true;
+          }
+          applyFullSwap() {
+            Pjax4._addHistoryEntry(this.response);
             return Pjax4.setPageBody(this.rroot, this.href);
           }
-          // private
-          // add current page to history
           historyAddCurrent(href) {
             if (this.opts.history === false || this.opts.ajax_node && !this.opts.target) {
               return;
@@ -620,38 +648,30 @@ var Pjax;
         }
         ;
         Pjax4.config = {
-          // should Pjax log info to console
-          is_silent: parseInt(location.port) < 1e3,
-          // do not scroll to top, use refresh() and not reload() on node with selectors
+          is_silent: !location.port || parseInt(location.port) < 1e3,
           no_scroll_selector: [".no-scroll"],
-          // skip pjax on following links and do location.href = target
-          // you can add function, regexp or string (checks for starts with)
           paths_to_skip: [],
-          // if link has any of these classes, Pjax will be skipped and link will be followed
-          // Example: %a.direct{ href '/somewhere' } somewhere
           no_pjax_class: ["no-pjax", "direct"],
           no_ajax_class: ["ajax-skip", "skip-ajax", "no-ajax", "top"],
-          // if parent id found with this class, ajax response data will be loaded in this class
-          // you can add ID for better targeting. If no ID given to .ajax class
-          //  * if response contains .ajax, first node found will be selected and it innerHTML will be used for replacement
-          //  * if there is no .ajax in response, full page response will be used
-          // Example: all links in "some_template" will refresh ".ajax" block only
-          // .ajax
-          //   = render 'some_template'
-          ajax_selector: ".ajax"
+          ajax_selector: ".ajax",
+          timeout: 1e4,
+          history_max: 20
         };
         Pjax4.historyData = {};
         return Pjax4;
       }.call(exports);
-      window.onpopstate = function(event2) {
+      window.onpopstate = function(event) {
         return window.requestAnimationFrame(function() {
-          var hdata, path, rroot;
+          var entry, path, rroot;
           path = Pjax3.path();
-          if (hdata = Pjax3.historyData[path]) {
-            console.log(`from history: ${path}`);
+          if (entry = Pjax3.historyData[path]) {
+            Pjax3.console(`from history: ${path}`);
             rroot = document.createElement("div");
-            rroot.innerHTML = hdata;
-            return Pjax3.setPageBody(rroot, path);
+            rroot.innerHTML = entry.html;
+            Pjax3.setPageBody(rroot, path);
+            if (entry.scrollY) {
+              return window.scrollTo(0, entry.scrollY);
+            }
           } else {
             return Pjax3.load(path, {
               history: false
