@@ -25,9 +25,9 @@ The helper takes care of issuing the XMLHttpRequest, parsing inline scripts, dis
 - **Drop-in navigation** – call `Pjax.onDocumentClick()` once to hijack every link that should stay on the current page.
 - **Scoped refreshes** – target a specific DOM node via `Pjax.refresh('#sidebar')` or rely on `.ajax` regions for dialog/content updates.
 - **History-aware** – integrates with `window.history`, dispatches `pjax:render`, and caches responses for fast back-button support.
-- **Inline script support** – replays inline `<script>` tags (with optional `delay` attribute for deferred execution) when new markup is inserted.
+- **Inline script support** – replays inline `<script>` tags (tag with `pjax-delay` to defer until after the DOM swap) when new markup is inserted.
 - **Scroll management** – preserves scroll position for refreshes, enforces top-of-page jumps for reloads, and exposes an opt-in view-transition mode.
-- **Form handling** – any `<form data-pjax="true">` (or target selector) automatically uses PJAX instead of a hard submit.
+- **Form handling** – any `<form data-pjax="true">` (full swap) or `<form data-pjax="#selector">` (targeted swap) automatically uses PJAX instead of a hard submit.
 
 ## Installation
 ```bash
@@ -87,40 +87,84 @@ Pjax.reload()
 | Method | Description |
 | --- | --- |
 | `Pjax.load(pathOrOpts, opts?)` | Normalizes the arguments via `getOpts` and performs an XMLHttpRequest. |
-| `Pjax.refresh(targetOrPath, opts?)` | Keeps scroll position, skips history changes for selector-based calls, and can refresh `.ajax` regions. |
-| `Pjax.reload(opts?)` | Forces a no-cache request and scrolls to the top once content is swapped. |
-| `Pjax.onDocumentClick()` | Installs the shared handler that intercepts link clicks. |
-| `Pjax.before / Pjax.after` | Lifecycle hooks you can override; return `false` in `before` to cancel navigation. |
-| `Pjax.qs(key, value, opts)` | Helper for updating query parameters and optionally pushing a new state. |
-| `Pjax.config` | Feature flags for skipping PJAX on certain paths/classes, defining `.ajax` selectors, and scroll suppression classes. |
+| `Pjax.refresh(targetOrPath, opts?)` | Keeps scroll position, skips history changes for selector-based calls, and can refresh `.ajax` regions. Bypasses the same-href debounce. |
+| `Pjax.reload(opts?)` | Forces a no-cache request and scrolls to the top once content is swapped. Bypasses the same-href debounce. |
+| `Pjax.onDocumentClick()` | Installs the shared handler that intercepts link clicks. Idempotent. |
+| `Pjax.before(href, opts) / Pjax.after(href)` | Lifecycle hooks you can override; return `false` in `before` to cancel navigation. |
+| `Pjax.confirm(message, node)` | Hook for `pjax-confirm`; default delegates to `window.confirm`. May return a boolean or a Promise. |
+| `Pjax.path()` | Current `location.pathname + location.search`. |
+| `Pjax.last()` | The last href PJAX navigated to, or `Pjax.path()` if none. |
+| `Pjax.refreshed()` | True iff the last two navigations targeted the same href (useful for skipping entrance animations on refresh). |
+| `Pjax.pushState(href)` / `Pjax.replace(href)` | Thin shortcuts over `history.pushState` / `replaceState` that auto-fill `document.title`. `Pjax.push` is an alias of `pushState`. |
+| `Pjax.qs(key, value, opts)` | Get/set query parameters; setter triggers `Pjax.load` by default, or `pushState` (with `{push: true}`), or returns the URL string (with `{href: true}`). |
+| `Pjax.emit(name, detail)` | Dispatches a cancellable `pjax:<name>` event; returns `false` if a listener prevented it. |
+| `Pjax.parseScripts(htmlOrNode)` | Replays inline `<script>` tags (respects `pjax-delay`). |
+| `Pjax.sendGlobalEvent()` | Dispatches `pjax:render` on `document`. |
+| `Pjax.config` | Feature flags for skipping PJAX on certain paths/classes, defining `.ajax` selectors, and scroll suppression classes (see [Configuration](#configuration)). |
 
 ### Request options
-`Pjax.getOpts` understands the following keys:
-- `path` / `href` – URL or query string to load (defaults to the current `location`).
-- `target` – CSS selector or DOM node to swap in place (history + scroll disabled automatically).
-- `ajax` – DOM node inside an `.ajax` container that should receive the response.
-- `form` – HTMLFormElement to serialize and append to the request path.
-- `done` – callback invoked after HTML is applied.
-- `scroll` – set to `false` to keep the current scroll when inserting full-page HTML.
-- `history` – set to `false` to avoid pushing browser history entries.
-- `cache` – set to `false` to add `cache-control: no-cache` to the request.
-- `replacePath` – alternate URL to push to history once loading completes.
+Anything accepting `opts` (`Pjax.load`, `Pjax.refresh`, `Pjax.reload`) takes the same bag.
+
+| Opt | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `path` / `href` | `string` | current `location` | URL or query-only string (`?foo=bar` resolves against current path or `.ajax` container's `data-path`). |
+| `target` | `string \| Node` | – | Swap response into this node by `id`. History + scroll auto-disabled. |
+| `ajax` | `Node` | – | DOM node inside an `.ajax` region; resolved to nearest `.ajax` ancestor. Set automatically by the click handler. |
+| `form` | `HTMLFormElement` | – | Serialize via native `FormData` and append to the path. |
+| `done` | `function` | – | Callback fired after a successful apply. |
+| `scroll` | `bool` | `true` for full swaps | Set `false` to keep current scroll. |
+| `history` | `bool` | `true` | Set `false` to skip `pushState`/`replaceState`. |
+| `cache` | `bool` | `true` | Set `false` to add `cache-control: no-cache`. |
+| `replace` | `bool` | `false` | Use `replaceState` instead of `pushState`. |
+| `replacePath` | `string` | – | Alternate URL to push/replace into history. |
+| `force` | `bool` | `false` | Skip the 2-second same-href debounce. Set automatically by `refresh` and `reload`. |
+
+Convenience shortcuts when calling:
+- Pass a string instead of opts → treated as `target` selector: `Pjax.load('/users', '#list')`
+- Pass a function → treated as `done`: `Pjax.load('/users', cb)`
+- Pass a DOM node → treated as `ajax`: `Pjax.load('/users', node)`
+
+### Configuration
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `Pjax.config.is_silent` | `true` on standard ports, `false` on dev ports (≥ 1000) | Suppresses `Pjax.console` logs in production. |
+| `Pjax.config.timeout` | `10000` | XHR timeout in ms. |
+| `Pjax.config.history_max` | `20` | Max in-memory cached responses for back/forward. |
+| `Pjax.config.ajax_selector` | `'.ajax'` | Selector for in-place region swaps. |
+| `Pjax.config.no_pjax_class` | `['no-pjax', 'direct']` | Classes that bypass PJAX entirely. |
+| `Pjax.config.no_ajax_class` | `['ajax-skip', 'skip-ajax', 'no-ajax', 'top']` | Classes that opt out of `.ajax` region matching. |
+| `Pjax.config.no_scroll_selector` | `['.no-scroll']` | Selectors whose ancestors suppress scroll-to-top. |
+| `Pjax.config.paths_to_skip` | `[]` | Strings/regexes/functions that force a hard navigation. |
+| `Pjax.DEV` | `undefined` | Set to `true` to force-enable verbose logging regardless of `is_silent`. |
+| `Pjax.useViewTransition` | `undefined` | Set to `true` to wrap full-page swaps in `document.startViewTransition` when available. |
 
 ### Link attributes
-The shared click handler honors a few attributes on `<a>` and `[click]` nodes:
-- `data-confirm="Are you sure?"` – prompts before navigating; cancel aborts the click. See [Custom confirm modals](#custom-confirm-modals) below.
-- `data-replace` – uses `history.replaceState` instead of `pushState` (no new back-stack entry).
-- `hx-target="#selector"` – swaps the response into the selector instead of the main pjax container.
+All pjax-specific attributes live under the `pjax-*` namespace. The shared click handler honors:
+- `pjax-confirm="Are you sure?"` – prompts before navigating; cancel aborts the click. See [Custom confirm modals](#custom-confirm-modals) below.
+- `pjax-replace` – uses `history.replaceState` instead of `pushState` (no new back-stack entry).
+- `pjax-target="#selector"` – swaps the response into the selector instead of the main pjax container. If the selector matches nothing the click is aborted with an error.
+- `click="…"` – inline JS run on click (instead of navigating). Bound to the element as `this`. Bypasses CSP only when `'unsafe-eval'` is allowed; prefer `addEventListener` in CSP-strict apps.
 - classes from `Pjax.config.no_pjax_class` (`no-pjax`, `direct` by default) – bypass PJAX entirely.
 
+### DOM container
+The PJAX swap target is the first matching `<pjax>` tag, falling back to the first `.pjax` class. The element must have an `id`:
+
+```html
+<main id="pjax" class="pjax">…</main>
+<!-- or -->
+<pjax id="pjax">…</pjax>
+```
+
+The container's `id` is also what the response HTML must match — `setPageBody` queries the response for `#<pjaxNode.id>` and morphs that subtree in.
+
 ### Custom confirm modals
-By default `data-confirm` calls `window.confirm`. Override `Pjax.confirm` to wire up a custom modal. The hook receives the message and the trigger node, and may return a boolean **or a Promise**:
+By default `pjax-confirm` calls `window.confirm`. Override `Pjax.confirm` to wire up a custom modal. The hook receives the message and the trigger node, and may return a boolean **or a Promise**:
 
 ```javascript
 Pjax.confirm = (message, node) => {
-  // any data-* on the node is yours to read
-  const yes = node.getAttribute('data-yes') || 'Confirm'
-  const no  = node.getAttribute('data-no')  || 'Cancel'
+  // any attribute on the node is yours to read
+  const yes = node.getAttribute('pjax-yes') || 'Confirm'
+  const no  = node.getAttribute('pjax-no')  || 'Cancel'
   return new Promise(resolve => {
     myModal.show({ message, yes, no, onConfirm: () => resolve(true), onCancel: () => resolve(false) })
   })
@@ -128,9 +172,9 @@ Pjax.confirm = (message, node) => {
 ```
 
 ```html
-<a href="/users/42" data-method="delete"
-   data-confirm="Delete this user?"
-   data-yes="Delete" data-no="Keep">Delete</a>
+<a href="/users/42"
+   pjax-confirm="Delete this user?"
+   pjax-yes="Delete" pjax-no="Keep">Delete</a>
 ```
 
 When the hook returns a Promise, the click is held; once it resolves, the navigation either proceeds or is dropped silently.
@@ -148,13 +192,13 @@ All events bubble from `document`. `pjax:before` is cancellable — call `event.
 | `pjax:render` | After DOM swap completes (full or targeted) | – |
 
 ### DOM helpers
-- `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `delay` attribute for deferred execution via `requestAnimationFrame`).
+- `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `pjax-delay` attribute for deferred execution via `requestAnimationFrame`).
 - `Pjax.sendGlobalEvent()` emits `pjax:render` on `document` after a successful render.
 - `Pjax.emit(name, detail)` dispatches a cancellable `pjax:<name>` event and returns `false` if a listener prevented it.
 - The module keeps a small in-memory cache (`Pjax.historyData`) that powers instant back/forward restores.
 
 ### Inline script execution order
-Inline `<script>` tags inside a response run **before** the new HTML is morphed into the live document. The intent is to let scripts seed globals/state that the rendered markup will then consume on `pjax:render`. Per-DOM wiring (querying or attaching to the freshly inserted nodes) should be done in a `pjax:render` listener, or in a script tagged with `delay="true"` — those run on the next animation frame, after the morph.
+Inline `<script>` tags inside a response run **before** the new HTML is morphed into the live document. The intent is to let scripts seed globals/state that the rendered markup will then consume on `pjax:render`. Per-DOM wiring (querying or attaching to the freshly inserted nodes) should be done in a `pjax:render` listener, or in a script tagged with `pjax-delay` — those run on the next animation frame, after the morph.
 
 ## Development
 ```bash

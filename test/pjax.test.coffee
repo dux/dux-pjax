@@ -207,10 +207,10 @@ describe 'Pjax module', ->
     Pjax.parseScripts html
     expect(window.__externalTest).to.equal 0
 
-  it 'defers scripts with delay attribute via requestAnimationFrame', ->
+  it 'defers scripts with pjax-delay attribute via requestAnimationFrame', ->
     Pjax = loadPjax()
     window.__delayTest = 0
-    html = '<div><script delay="true">window.__delayTest = 1</script></div>'
+    html = '<div><script pjax-delay>window.__delayTest = 1</script></div>'
     Pjax.parseScripts html
     # requestAnimationFrame is sync in test env, so it runs immediately
     expect(window.__delayTest).to.equal 1
@@ -355,22 +355,6 @@ describe 'Pjax module', ->
     Pjax.scrollLock()
     expect(Pjax._scrollLockTime).to.equal firstTime
 
-  # --- parseSingleScript ---
-
-  it 'parseSingleScript removes trigger img and marks script as executed', ->
-    Pjax = loadPjax()
-    script = document.createElement 'script'
-    script.id = 'test-single'
-    script.textContent = 'void 0'
-    document.body.appendChild script
-
-    img = document.createElement 'img'
-    document.body.appendChild img
-
-    Pjax.parseSingleScript 'test-single', img
-    expect(script.text).to.equal '1'
-    expect(img.parentNode).to.be.null
-
   # --- parseScripts edge cases ---
 
   it 'parseScripts skips non-javascript type scripts', ->
@@ -405,18 +389,6 @@ describe 'Pjax module', ->
     result = Pjax.qs 'color', 'blue', href: true
     expect(result).to.include 'color=blue'
     expect(result).to.include location.pathname
-
-  it 'qs setter with push+mock sets value without calling Pjax.push', ->
-    Pjax = loadPjax()
-    pushCalled = false
-    originalPush = Pjax.push
-    Pjax.push = -> pushCalled = true
-
-    try
-      Pjax.qs 'size', 'large', push: true, mock: true
-      expect(pushCalled).to.equal false
-    finally
-      Pjax.push = originalPush
 
   it 'qs setter triggers Pjax.load by default', ->
     Pjax = loadPjax()
@@ -765,6 +737,21 @@ describe 'Pjax module', ->
     finally
       console.log = originalLog
 
+  it 'Pjax.DEV overrides is_silent', ->
+    Pjax = loadPjax()
+    logged = null
+    originalLog = console.log
+    console.log = (msg) -> logged = msg
+
+    try
+      Pjax.config.is_silent = true
+      Pjax.DEV = true
+      Pjax.console 'forced via DEV'
+      expect(logged).to.equal 'forced via DEV'
+    finally
+      console.log = originalLog
+      Pjax.DEV = undefined
+
   # --- replace ---
 
   it 'replace uses replaceState', ->
@@ -908,23 +895,51 @@ describe 'PjaxOnClick', ->
     expect(loadedArgs.href).to.equal '/clicked-page'
     expect(loadedArgs.opts.ajax).to.equal link
 
-  it 'uses hx-target to load into a specific element', ->
+  it 'uses pjax-target to load into a specific element', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
         <div id="target-box">Old</div>
-        <a href="/hx-page" hx-target="#target-box" id="hx-link">Load</a>
+        <a href="/target-page" pjax-target="#target-box" id="t-link">Load</a>
       </main>
     '''
     loadedArgs = null
     Pjax.load = (href, opts) -> loadedArgs = { href, opts }
 
-    link = document.getElementById('hx-link')
+    link = document.getElementById('t-link')
     e = createClickEvent(target: link)
     PjaxOnClick.main(e)
 
-    expect(loadedArgs.href).to.equal '/hx-page'
+    expect(loadedArgs.href).to.equal '/target-page'
     expect(loadedArgs.opts.target).to.equal document.getElementById('target-box')
+
+  it 'aborts and logs error when pjax-target selector matches nothing', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/x" pjax-target="#missing" id="miss-link">Load</a>
+      </main>
+    '''
+    loadCalled = false
+    Pjax.load = -> loadCalled = true
+    opened = null
+    originalOpen = window.open
+    window.open = (url) -> opened = url
+
+    errs = []
+    originalError = Pjax.error
+    Pjax.error = (msg) -> errs.push msg
+
+    try
+      link = document.getElementById('miss-link')
+      e = createClickEvent(target: link)
+      PjaxOnClick.main(e)
+      expect(loadCalled).to.equal false
+      expect(opened).to.be.null
+      expect(errs[0]).to.include 'pjax-target'
+    finally
+      window.open = originalOpen
+      Pjax.error = originalError
 
   it 'opens external URLs in new window for no-pjax class links', ->
     { Pjax, PjaxOnClick } = loadModules()
@@ -1004,11 +1019,11 @@ describe 'PjaxOnClick', ->
     finally
       window.open = originalOpen
 
-  it 'data-confirm aborts navigation when confirm returns false', ->
+  it 'pjax-confirm aborts navigation when confirm returns false', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/danger" data-confirm="Sure?" id="confirm-link">Delete</a>
+        <a href="/danger" pjax-confirm="Sure?" id="confirm-link">Delete</a>
       </main>
     '''
     loadCalled = false
@@ -1026,11 +1041,11 @@ describe 'PjaxOnClick', ->
     finally
       window.confirm = originalConfirm
 
-  it 'data-confirm proceeds with navigation when confirm returns true', ->
+  it 'pjax-confirm proceeds with navigation when confirm returns true', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/ok" data-confirm="Sure?" id="confirm-ok">Go</a>
+        <a href="/ok" pjax-confirm="Sure?" id="confirm-ok">Go</a>
       </main>
     '''
     loadedHref = null
@@ -1046,11 +1061,11 @@ describe 'PjaxOnClick', ->
     finally
       window.confirm = originalConfirm
 
-  it 'data-replace passes replace flag through to Pjax.load', ->
+  it 'pjax-replace passes replace flag through to Pjax.load', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/replace-me" data-replace id="rep-link">Tab</a>
+        <a href="/replace-me" pjax-replace id="rep-link">Tab</a>
       </main>
     '''
     loadedOpts = null
@@ -1081,13 +1096,13 @@ describe 'PjaxOnClick', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/del" data-confirm="Sure?" data-yes="Delete" id="hooked">X</a>
+        <a href="/del" pjax-confirm="Sure?" pjax-yes="Delete" id="hooked">X</a>
       </main>
     '''
     Pjax.load = ->
     captured = null
     Pjax.confirm = (msg, node) ->
-      captured = { msg, yesAttr: node.getAttribute('data-yes'), id: node.id }
+      captured = { msg, yesAttr: node.getAttribute('pjax-yes'), id: node.id }
       false
 
     link = document.getElementById('hooked')
@@ -1101,7 +1116,7 @@ describe 'PjaxOnClick', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/async" data-confirm="?" id="async-link">X</a>
+        <a href="/async" pjax-confirm="?" id="async-link">X</a>
       </main>
     '''
     loadCalledWith = null
@@ -1124,7 +1139,7 @@ describe 'PjaxOnClick', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''
       <main class="pjax" id="pjax">
-        <a href="/no-go" data-confirm="?" id="no-link">X</a>
+        <a href="/no-go" pjax-confirm="?" id="no-link">X</a>
       </main>
     '''
     loadCalled = false
@@ -1259,6 +1274,49 @@ describe 'Pjax lifecycle events', ->
     finally
       window.history.pushState = originalPush
       window.history.replaceState = originalReplace
+
+describe 'Pjax.refresh and Pjax.reload bypass debounce', ->
+  beforeEach ->
+    setupGlobals()
+
+  loadPjaxFresh = ->
+    delete require.cache[require.resolve('../src/pjax.coffee')]
+    require '../src/pjax.coffee'
+
+  it 'instance load skips debounce when opts.force is true', ->
+    Pjax = loadPjaxFresh()
+    global.event = undefined
+    Pjax.before = -> false
+    Pjax.lastHref = '/same'
+    Pjax._lastLoadTime = Date.now()
+    pjax = new Pjax(path: '/same', force: true)
+    result = pjax.load()
+    expect(result).to.not.equal false
+    expect(Pjax.lastHref).to.equal '/same'
+
+  it 'instance load still debounces when opts.force is unset', ->
+    Pjax = loadPjaxFresh()
+    global.event = undefined
+    Pjax.before = -> false
+    Pjax.lastHref = '/same'
+    Pjax._lastLoadTime = Date.now()
+    pjax = new Pjax(path: '/same')
+    result = pjax.load()
+    expect(result).to.equal false
+
+  it 'refresh adds force flag', ->
+    Pjax = loadPjaxFresh()
+    fetched = null
+    Pjax.fetch = (opts) -> fetched = opts
+    Pjax.refresh()
+    expect(fetched.force).to.equal true
+
+  it 'reload adds force flag', ->
+    Pjax = loadPjaxFresh()
+    fetched = null
+    Pjax.fetch = (opts) -> fetched = opts
+    Pjax.reload()
+    expect(fetched.force).to.equal true
 
 describe 'Form serialization (no Z dependency)', ->
   beforeEach ->

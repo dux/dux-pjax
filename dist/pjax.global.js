@@ -47,13 +47,15 @@ var Pjax;
           proceed = function() {
             return PjaxOnClick.execute(ctx);
           };
-          if (confirmMsg = node.getAttribute("data-confirm")) {
+          if (confirmMsg = node.getAttribute("pjax-confirm")) {
             result = Pjax.confirm(confirmMsg, node);
             if (result && typeof result.then === "function") {
               result.then(function(ok) {
                 if (ok) {
                   return proceed();
                 }
+              }).catch(function(err) {
+                return Pjax.error(`confirm rejected: ${err}`);
               });
               return;
             }
@@ -64,25 +66,24 @@ var Pjax;
           return proceed();
         },
         execute: function(ctx) {
-          var click, el, href, hxNode, hxTarget, i, len, node, ref, replace;
+          var click, el, href, i, len, node, pjaxTarget, ref, replace, targetNode;
           node = ctx.node;
           if (click = node.getAttribute("click")) {
             return new Function(click).bind(node)();
           }
           href = node.getAttribute("href");
-          replace = node.hasAttribute("data-replace");
-          if (hxTarget = node.getAttribute("hx-target")) {
-            if (hxNode = document.querySelector(hxTarget)) {
-              Pjax.load(href, {
-                target: hxNode,
-                replace
-              });
+          replace = node.hasAttribute("pjax-replace");
+          if (pjaxTarget = node.getAttribute("pjax-target")) {
+            targetNode = document.querySelector(pjaxTarget);
+            if (!targetNode) {
+              Pjax.error(`pjax-target selector did not match: ${pjaxTarget}`);
               return;
             }
-          }
-          if (href.slice(0, 2) === "//") {
-            href = href.replace("/", "");
-            return window.open(window.location.origin + href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
+            Pjax.load(href, {
+              target: targetNode,
+              replace
+            });
+            return;
           }
           if (ctx.which === 2 || ctx.metaKey) {
             return window.open(href);
@@ -148,11 +149,13 @@ var Pjax;
             }
             opts = this.getOpts(func, opts);
             opts.scroll || (opts.scroll = false);
+            opts.force = true;
             return this.fetch(opts);
           }
           static reload(opts) {
             opts = this.getOpts(opts);
             opts.cache = false;
+            opts.force = true;
             return this.fetch(opts);
           }
           static refreshed() {
@@ -181,7 +184,7 @@ var Pjax;
             return el;
           }
           static console(msg) {
-            if (!this.config.is_silent) {
+            if (this.DEV || !this.config.is_silent) {
               return console.log(msg);
             }
           }
@@ -197,11 +200,11 @@ var Pjax;
           static error(msg) {
             return console.error(`Pjax error: ${msg}`);
           }
-          static push(href) {
+          static pushState(href) {
             return window.history.pushState({}, document.title, href);
           }
-          static pushState(href) {
-            return this.push(href);
+          static push(href) {
+            return this.pushState(href);
           }
           static replace(href) {
             return window.history.replaceState({}, document.title, href);
@@ -272,11 +275,14 @@ var Pjax;
             if (typeof opts.node === "string") {
               opts.node = document.querySelector(opts.node);
             }
+            if (!opts.node) {
+              return delete opts.ajax;
+            }
             skip = false;
             ref = this.config.no_ajax_class;
             for (i = 0, len = ref.length; i < len; i++) {
               el = ref[i];
-              if (opts.ajax.closest(`.${el}`)) {
+              if (opts.node.closest(`.${el}`)) {
                 skip = true;
               }
             }
@@ -345,7 +351,7 @@ var Pjax;
           }
           // --- page rendering ---
           static setPageBody(node, href) {
-            var new_body, pjaxNode, ref, title;
+            var finish, new_body, pjaxNode, ref, title;
             title = (ref = node.querySelector("title")) != null ? ref.innerHTML : void 0;
             document.title = title || "no page title (pjax)";
             this.scrollLock();
@@ -354,15 +360,16 @@ var Pjax;
               return;
             }
             if (new_body = node.querySelector("#" + pjaxNode.id)) {
-              if (this.useViewTransition && document.startViewTransition) {
-                document.startViewTransition(() => {
-                  return this.morphInto(pjaxNode, this.parseScripts(new_body));
-                });
-              } else {
+              finish = () => {
                 this.morphInto(pjaxNode, this.parseScripts(new_body));
+                this.after(href);
+                return this.sendGlobalEvent();
+              };
+              if (this.useViewTransition && document.startViewTransition) {
+                return document.startViewTransition(finish);
+              } else {
+                return finish();
               }
-              this.after(href, this.opts);
-              return this.sendGlobalEvent();
             }
           }
           static morphInto(target, html) {
@@ -371,14 +378,6 @@ var Pjax;
               return window.Fez.nodeMorph(target, html);
             } else {
               return target.innerHTML = html;
-            }
-          }
-          static parseSingleScript(id, img) {
-            var node;
-            img.remove();
-            if (node = document.getElementById(id)) {
-              new Function(node.textContent)();
-              return node.text = 1;
             }
           }
           static parseScripts(node) {
@@ -407,7 +406,7 @@ var Pjax;
               }
               func = new Function(script_tag.textContent);
               script_tag.text = 1;
-              if (script_tag.getAttribute("delay")) {
+              if (script_tag.hasAttribute("pjax-delay")) {
                 requestAnimationFrame(func);
               } else {
                 func();
@@ -450,9 +449,7 @@ var Pjax;
                 href = location.pathname;
               }
               if (opts.push) {
-                if (!opts.mock) {
-                  return this.push(href);
-                }
+                return this.push(href);
               } else if (opts.href) {
                 return href;
               } else {
@@ -499,8 +496,10 @@ var Pjax;
               return false;
             }
             now = Date.now();
-            if (Pjax4.lastHref === this.href && now - (Pjax4._lastLoadTime || 0) < 2e3) {
-              return false;
+            if (!this.opts.force) {
+              if (Pjax4.lastHref === this.href && now - (Pjax4._lastLoadTime || 0) < 2e3) {
+                return false;
+              }
             }
             Pjax4._lastLoadTime = now;
             currentEntry = Pjax4.historyData[Pjax4.path()];
@@ -537,7 +536,7 @@ var Pjax;
                 return false;
               }
             }
-            if (/^http/.test(this.href) || /#/.test(this.href) || this.is_disabled) {
+            if (/^http/.test(this.href) || /#/.test(this.href)) {
               return this.redirect();
             }
             ref = Pjax4.config.paths_to_skip;

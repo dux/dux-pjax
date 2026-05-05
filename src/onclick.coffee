@@ -16,10 +16,12 @@ PjaxOnClick =
 
     proceed = -> PjaxOnClick.execute(ctx)
 
-    if confirmMsg = node.getAttribute('data-confirm')
+    if confirmMsg = node.getAttribute('pjax-confirm')
       result = Pjax.confirm(confirmMsg, node)
       if result and typeof result.then == 'function'
-        result.then (ok) -> proceed() if ok
+        result
+          .then((ok) -> proceed() if ok)
+          .catch (err) -> Pjax.error "confirm rejected: #{err}"
         return
       return unless result
 
@@ -32,16 +34,15 @@ PjaxOnClick =
       return (new Function(click)).bind(node)()
 
     href = node.getAttribute 'href'
-    replace = node.hasAttribute('data-replace')
+    replace = node.hasAttribute('pjax-replace')
 
-    if hxTarget = node.getAttribute('hx-target')
-      if hxNode = document.querySelector(hxTarget)
-        Pjax.load href, target: hxNode, replace: replace
+    if pjaxTarget = node.getAttribute('pjax-target')
+      targetNode = document.querySelector(pjaxTarget)
+      unless targetNode
+        Pjax.error "pjax-target selector did not match: #{pjaxTarget}"
         return
-
-    if href.slice(0, 2) == '//'
-      href = href.replace '/', ''
-      return window.open(window.location.origin + href, node.getAttribute('target') || href.replace(/[^\w]/g, ''))
+      Pjax.load href, target: targetNode, replace: replace
+      return
 
     if ctx.which == 2 || ctx.metaKey
       return window.open href

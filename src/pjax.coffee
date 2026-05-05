@@ -32,11 +32,13 @@ class Pjax
 
     opts = @getOpts func, opts
     opts.scroll ||= false
+    opts.force = true
     @fetch opts
 
   @reload: (opts) ->
     opts = @getOpts opts
     opts.cache = false
+    opts.force = true
     @fetch opts
 
   @refreshed: ->
@@ -60,7 +62,7 @@ class Pjax
     el
 
   @console: (msg) ->
-    console.log msg unless @config.is_silent
+    console.log msg if @DEV || !@config.is_silent
 
   @before: -> true
   @after: -> true
@@ -69,10 +71,10 @@ class Pjax
   @error: (msg) ->
     console.error "Pjax error: #{msg}"
 
-  @push: (href) ->
+  @pushState: (href) ->
     window.history.pushState {}, document.title, href
 
-  @pushState: (href) -> @push href
+  @push: (href) -> @pushState href
 
   @replace: (href) ->
     window.history.replaceState {}, document.title, href
@@ -123,9 +125,11 @@ class Pjax
     opts.node = opts.ajax
     opts.node = document.querySelector(opts.node) if typeof opts.node == 'string'
 
+    return delete opts.ajax unless opts.node
+
     skip = false
     for el in @config.no_ajax_class
-      skip = true if opts.ajax.closest(".#{el}")
+      skip = true if opts.node.closest(".#{el}")
 
     unless skip
       if ajax_node = opts.node.closest(@config.ajax_selector)
@@ -181,26 +185,21 @@ class Pjax
     pjaxNode = @node()
     return unless pjaxNode
     if new_body = node.querySelector('#' + pjaxNode.id)
-      if @useViewTransition && document.startViewTransition
-        document.startViewTransition =>
-          @morphInto pjaxNode, @parseScripts(new_body)
-      else
+      finish = =>
         @morphInto pjaxNode, @parseScripts(new_body)
+        @after href
+        @sendGlobalEvent()
 
-      @after href, @opts
-      @sendGlobalEvent()
+      if @useViewTransition && document.startViewTransition
+        document.startViewTransition finish
+      else
+        finish()
 
   @morphInto: (target, html) ->
     if window.Fez?.nodeMorph
       window.Fez.nodeMorph target, html
     else
       target.innerHTML = html
-
-  @parseSingleScript: (id, img) ->
-    img.remove()
-    if node = document.getElementById(id)
-      (new Function node.textContent)()
-      node.text = 1
 
   @parseScripts: (node) ->
     if typeof node == 'string'
@@ -225,10 +224,11 @@ class Pjax
       # before their setup ran.
       # Side effect: a script cannot `document.querySelector` siblings in the
       # same response (they aren't in `document` yet) — do per-DOM wiring in a
-      # `pjax:render` listener, or use `delay` to defer until the next frame.
+      # `pjax:render` listener, or tag the script `pjax-delay` to defer it to
+      # the next animation frame (after the morph completes).
       func = new Function(script_tag.textContent)
       script_tag.text = 1
-      if script_tag.getAttribute('delay') then requestAnimationFrame(func) else func()
+      if script_tag.hasAttribute('pjax-delay') then requestAnimationFrame(func) else func()
 
     node.innerHTML
 
@@ -258,7 +258,7 @@ class Pjax
         href = location.pathname
 
       if opts.push
-        @push href unless opts.mock
+        @push href
       else if opts.href
         href
       else
@@ -295,7 +295,8 @@ class Pjax
     return false unless @href
 
     now = Date.now()
-    return false if Pjax.lastHref == @href && now - (Pjax._lastLoadTime || 0) < 2000
+    unless @opts.force
+      return false if Pjax.lastHref == @href && now - (Pjax._lastLoadTime || 0) < 2000
     Pjax._lastLoadTime = now
 
     # save scroll position of current page before navigating
@@ -319,7 +320,7 @@ class Pjax
         node.scrollIntoView behavior: 'smooth', block: 'start'
         return false
 
-    return @redirect() if /^http/.test(@href) || /#/.test(@href) || @is_disabled
+    return @redirect() if /^http/.test(@href) || /#/.test(@href)
 
     for el in Pjax.config.paths_to_skip
       switch typeof el
