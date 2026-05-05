@@ -106,10 +106,55 @@ Pjax.reload()
 - `cache` – set to `false` to add `cache-control: no-cache` to the request.
 - `replacePath` – alternate URL to push to history once loading completes.
 
-### DOM helpers and events
+### Link attributes
+The shared click handler honors a few attributes on `<a>` and `[click]` nodes:
+- `data-confirm="Are you sure?"` – prompts before navigating; cancel aborts the click. See [Custom confirm modals](#custom-confirm-modals) below.
+- `data-replace` – uses `history.replaceState` instead of `pushState` (no new back-stack entry).
+- `hx-target="#selector"` – swaps the response into the selector instead of the main pjax container.
+- classes from `Pjax.config.no_pjax_class` (`no-pjax`, `direct` by default) – bypass PJAX entirely.
+
+### Custom confirm modals
+By default `data-confirm` calls `window.confirm`. Override `Pjax.confirm` to wire up a custom modal. The hook receives the message and the trigger node, and may return a boolean **or a Promise**:
+
+```javascript
+Pjax.confirm = (message, node) => {
+  // any data-* on the node is yours to read
+  const yes = node.getAttribute('data-yes') || 'Confirm'
+  const no  = node.getAttribute('data-no')  || 'Cancel'
+  return new Promise(resolve => {
+    myModal.show({ message, yes, no, onConfirm: () => resolve(true), onCancel: () => resolve(false) })
+  })
+}
+```
+
+```html
+<a href="/users/42" data-method="delete"
+   data-confirm="Delete this user?"
+   data-yes="Delete" data-no="Keep">Delete</a>
+```
+
+When the hook returns a Promise, the click is held; once it resolves, the navigation either proceeds or is dropped silently.
+
+### Lifecycle events
+All events bubble from `document`. `pjax:before` is cancellable — call `event.preventDefault()` to abort the navigation.
+
+| Event | When | `event.detail` |
+| --- | --- | --- |
+| `pjax:before` | After click/form intercept, before XHR fires | `{ href, opts }` |
+| `pjax:start` | Right before `XMLHttpRequest.send()` | `{ href, opts }` |
+| `pjax:success` | After response applied successfully | `{ href, opts, status }` |
+| `pjax:error` | Network error, timeout, non-200, or apply failure | `{ href, opts, reason, status? }` |
+| `pjax:complete` | Always, after success or error | `{ href, opts }` |
+| `pjax:render` | After DOM swap completes (full or targeted) | – |
+
+### DOM helpers
 - `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `delay` attribute for deferred execution via `requestAnimationFrame`).
 - `Pjax.sendGlobalEvent()` emits `pjax:render` on `document` after a successful render.
+- `Pjax.emit(name, detail)` dispatches a cancellable `pjax:<name>` event and returns `false` if a listener prevented it.
 - The module keeps a small in-memory cache (`Pjax.historyData`) that powers instant back/forward restores.
+
+### Inline script execution order
+Inline `<script>` tags inside a response run **before** the new HTML is morphed into the live document. The intent is to let scripts seed globals/state that the rendered markup will then consume on `pjax:render`. Per-DOM wiring (querying or attaching to the freshly inserted nodes) should be done in a `pjax:render` listener, or in a script tagged with `delay="true"` — those run on the next animation frame, after the morph.
 
 ## Development
 ```bash

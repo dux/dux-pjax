@@ -36,7 +36,7 @@ class Pjax
 
   @reload: (opts) ->
     opts = @getOpts opts
-    opts.cache ||= false
+    opts.cache = false
     @fetch opts
 
   @refreshed: ->
@@ -64,6 +64,7 @@ class Pjax
 
   @before: -> true
   @after: -> true
+  @confirm: (message, node) -> window.confirm(message)
 
   @error: (msg) ->
     console.error "Pjax error: #{msg}"
@@ -77,7 +78,12 @@ class Pjax
     window.history.replaceState {}, document.title, href
 
   @sendGlobalEvent: ->
-    document.dispatchEvent new CustomEvent('pjax:render')
+    document.dispatchEvent new CustomEvent('pjax:render', bubbles: true)
+
+  @emit: (name, detail) ->
+    event = new CustomEvent("pjax:#{name}", bubbles: true, cancelable: true, detail: detail)
+    document.dispatchEvent event
+    not event.defaultPrevented
 
   # --- option normalization ---
 
@@ -106,9 +112,10 @@ class Pjax
     opts.path ||= @path()
 
     if opts.form
-      for key, value of Z(opts.form).serializeHash()
+      params = new URLSearchParams(new FormData(opts.form)).toString()
+      if params
         opts.path += if opts.path.includes('?') then '&' else '?'
-        opts.path += "#{key}=#{encodeURIComponent(value)}"
+        opts.path += params
 
     opts
 
@@ -211,7 +218,14 @@ class Pjax
         @script_cnt ||= 0
         script_tag.id = "app-sc-#{++@script_cnt}"
 
-      # must run synchronously so globals are set before subsequent DOM renders
+      # Scripts run BEFORE the new HTML is morphed into the live document.
+      # Rationale: inline scripts in a response typically set globals/state that
+      # the rendered markup will then consume on `pjax:render`. Running them
+      # against a still-detached DOM also avoids a flash where new nodes appear
+      # before their setup ran.
+      # Side effect: a script cannot `document.querySelector` siblings in the
+      # same response (they aren't in `document` yet) — do per-DOM wiring in a
+      # `pjax:render` listener, or use `delay` to defer until the next frame.
       func = new Function(script_tag.textContent)
       script_tag.text = 1
       if script_tag.getAttribute('delay') then requestAnimationFrame(func) else func()
@@ -296,6 +310,7 @@ class Pjax
       return window.open @href
 
     return if Pjax.before(@href, @opts) == false
+    return if Pjax.emit('before', href: @href, opts: @opts) == false
     return if location.hash && location.pathname == @href
 
     if @href.startsWith('#')
@@ -317,7 +332,7 @@ class Pjax
     false
 
   sendRequest: ->
-    document.dispatchEvent new CustomEvent('pjax:start')
+    Pjax.emit 'start', href: @href, opts: @opts
 
     @opts.req_start_time = Date.now()
     @opts.path = @href
@@ -328,13 +343,17 @@ class Pjax
     Pjax.request = @req = new XMLHttpRequest()
     @req.timeout = Pjax.config.timeout || 10000
 
-    @req.onerror = (e) ->
+    @req.onerror = (e) =>
       Pjax.error 'Net error: Server response not received (Pjax)'
       console.error e
+      Pjax.emit 'error', href: @href, opts: @opts, reason: 'network'
+      Pjax.emit 'complete', href: @href, opts: @opts
 
     @req.ontimeout = =>
       Pjax.request = null
       Pjax.error "Request timeout: #{@href}"
+      Pjax.emit 'error', href: @href, opts: @opts, reason: 'timeout'
+      Pjax.emit 'complete', href: @href, opts: @opts
       @redirect()
 
     @req.open 'GET', @href
@@ -351,16 +370,23 @@ class Pjax
     log_data += ' (back trigger)' if @opts.history == false
     Pjax.console "#{log_data} (app #{@req.getResponseHeader('x-lux-speed') || 'n/a'}, real #{time_diff}ms, status #{@req.status})"
 
-    return @redirect() if @req.status != 200
+    if @req.status != 200
+      Pjax.emit 'error', href: @href, opts: @opts, reason: 'status', status: @req.status
+      Pjax.emit 'complete', href: @href, opts: @opts
+      return @redirect()
 
     if rul = @req.responseURL
       parsed = new URL(rul)
       @href = parsed.pathname + parsed.search
 
     unless @applyLoadedData()
+      Pjax.emit 'error', href: @href, opts: @opts, reason: 'apply'
+      Pjax.emit 'complete', href: @href, opts: @opts
       return @redirect()
 
     @opts.done() if typeof @opts.done == 'function'
+    Pjax.emit 'success', href: @href, opts: @opts, status: @req.status
+    Pjax.emit 'complete', href: @href, opts: @opts
 
     unless @opts.scroll == false || Pjax.shouldSkipScroll(@opts.node)
       window.requestAnimationFrame ->
@@ -413,8 +439,9 @@ class Pjax
     return if @history_added
     @history_added = true
 
-    if Pjax._lastHrefCheck == href
+    if @opts.replace || Pjax._lastHrefCheck == href
       window.history.replaceState {}, document.title, href
+      Pjax._lastHrefCheck = href
     else
       window.history.pushState {}, document.title, href
       Pjax._lastHrefCheck = href
@@ -433,7 +460,9 @@ window.onpopstate = (event) ->
     else
       Pjax.load path, history: false
 
-window.addEventListener 'DOMContentLoaded', ->
+bindPjaxBoot = ->
+  return if Pjax._booted
+  Pjax._booted = true
   setTimeout Pjax.sendGlobalEvent, 0
 
   document.body.addEventListener 'submit', (e) ->
@@ -442,6 +471,11 @@ window.addEventListener 'DOMContentLoaded', ->
       e.preventDefault()
       pjax_target = if is_pjax == 'true' then null else is_pjax
       Pjax.load form.getAttribute('action'), form: form, target: pjax_target
+
+if document.readyState == 'loading'
+  window.addEventListener 'DOMContentLoaded', bindPjaxBoot
+else
+  bindPjaxBoot()
 
 if typeof module != 'undefined' && module.exports
   module.exports = Pjax

@@ -32,21 +32,50 @@ var Pjax;
       var PjaxOnClick;
       PjaxOnClick = {
         main: function(event) {
-          var click, el, href, hxNode, hxTarget, i, len, node, ref;
+          var confirmMsg, ctx, node, proceed, result;
           node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""])');
           if (!node) {
             return;
           }
           event.stopPropagation();
           event.preventDefault();
+          ctx = {
+            node,
+            which: event.which,
+            metaKey: event.metaKey
+          };
+          proceed = function() {
+            return PjaxOnClick.execute(ctx);
+          };
+          if (confirmMsg = node.getAttribute("data-confirm")) {
+            result = Pjax.confirm(confirmMsg, node);
+            if (result && typeof result.then === "function") {
+              result.then(function(ok) {
+                if (ok) {
+                  return proceed();
+                }
+              });
+              return;
+            }
+            if (!result) {
+              return;
+            }
+          }
+          return proceed();
+        },
+        execute: function(ctx) {
+          var click, el, href, hxNode, hxTarget, i, len, node, ref, replace;
+          node = ctx.node;
           if (click = node.getAttribute("click")) {
             return new Function(click).bind(node)();
           }
           href = node.getAttribute("href");
+          replace = node.hasAttribute("data-replace");
           if (hxTarget = node.getAttribute("hx-target")) {
             if (hxNode = document.querySelector(hxTarget)) {
               Pjax.load(href, {
-                target: hxNode
+                target: hxNode,
+                replace
               });
               return;
             }
@@ -55,7 +84,7 @@ var Pjax;
             href = href.replace("/", "");
             return window.open(window.location.origin + href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
           }
-          if (event.which === 2 || event.metaKey) {
+          if (ctx.which === 2 || ctx.metaKey) {
             return window.open(href);
           }
           ref = Pjax.config.no_pjax_class;
@@ -72,14 +101,15 @@ var Pjax;
           if (/^javascript:/.test(href)) {
             return new Function(href.replace(/^javascript:/, ""))();
           }
-          if (/^\w/.test(href) || node.getAttribute("target")) {
+          if (/^\w+:/.test(href) || node.getAttribute("target")) {
             if (/^vscode:/.test(href)) {
               return window.location.href = href;
             }
             return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
           }
           Pjax.load(href, {
-            ajax: node
+            ajax: node,
+            replace
           });
           return false;
         }
@@ -95,6 +125,7 @@ var Pjax;
     "src/pjax.coffee"(exports, module) {
       var Pjax3;
       var PjaxOnClick;
+      var bindPjaxBoot;
       PjaxOnClick = require_onclick();
       Pjax3 = function() {
         class Pjax4 {
@@ -121,7 +152,7 @@ var Pjax;
           }
           static reload(opts) {
             opts = this.getOpts(opts);
-            opts.cache || (opts.cache = false);
+            opts.cache = false;
             return this.fetch(opts);
           }
           static refreshed() {
@@ -160,6 +191,9 @@ var Pjax;
           static after() {
             return true;
           }
+          static confirm(message, node) {
+            return window.confirm(message);
+          }
           static error(msg) {
             return console.error(`Pjax error: ${msg}`);
           }
@@ -173,7 +207,19 @@ var Pjax;
             return window.history.replaceState({}, document.title, href);
           }
           static sendGlobalEvent() {
-            return document.dispatchEvent(new CustomEvent("pjax:render"));
+            return document.dispatchEvent(new CustomEvent("pjax:render", {
+              bubbles: true
+            }));
+          }
+          static emit(name, detail) {
+            var event;
+            event = new CustomEvent(`pjax:${name}`, {
+              bubbles: true,
+              cancelable: true,
+              detail
+            });
+            document.dispatchEvent(event);
+            return !event.defaultPrevented;
           }
           // --- option normalization ---
           static getOpts(path, opts) {
@@ -188,7 +234,7 @@ var Pjax;
             return opts;
           }
           static _resolveArgs(path, opts) {
-            var key, ref, value;
+            var params;
             opts || (opts = {});
             if (typeof opts === "string") {
               opts = {
@@ -212,11 +258,10 @@ var Pjax;
             }
             opts.path || (opts.path = this.path());
             if (opts.form) {
-              ref = Z(opts.form).serializeHash();
-              for (key in ref) {
-                value = ref[key];
+              params = new URLSearchParams(new FormData(opts.form)).toString();
+              if (params) {
                 opts.path += opts.path.includes("?") ? "&" : "?";
-                opts.path += `${key}=${encodeURIComponent(value)}`;
+                opts.path += params;
               }
             }
             return opts;
@@ -471,6 +516,12 @@ var Pjax;
             if (Pjax4.before(this.href, this.opts) === false) {
               return;
             }
+            if (Pjax4.emit("before", {
+              href: this.href,
+              opts: this.opts
+            }) === false) {
+              return;
+            }
             if (location.hash && location.pathname === this.href) {
               return;
             }
@@ -517,7 +568,10 @@ var Pjax;
           }
           sendRequest() {
             var headers, k, v;
-            document.dispatchEvent(new CustomEvent("pjax:start"));
+            Pjax4.emit("start", {
+              href: this.href,
+              opts: this.opts
+            });
             this.opts.req_start_time = Date.now();
             this.opts.path = this.href;
             headers = {
@@ -528,13 +582,31 @@ var Pjax;
             }
             Pjax4.request = this.req = new XMLHttpRequest();
             this.req.timeout = Pjax4.config.timeout || 1e4;
-            this.req.onerror = function(e) {
+            this.req.onerror = (e) => {
               Pjax4.error("Net error: Server response not received (Pjax)");
-              return console.error(e);
+              console.error(e);
+              Pjax4.emit("error", {
+                href: this.href,
+                opts: this.opts,
+                reason: "network"
+              });
+              return Pjax4.emit("complete", {
+                href: this.href,
+                opts: this.opts
+              });
             };
             this.req.ontimeout = () => {
               Pjax4.request = null;
               Pjax4.error(`Request timeout: ${this.href}`);
+              Pjax4.emit("error", {
+                href: this.href,
+                opts: this.opts,
+                reason: "timeout"
+              });
+              Pjax4.emit("complete", {
+                href: this.href,
+                opts: this.opts
+              });
               return this.redirect();
             };
             this.req.open("GET", this.href);
@@ -558,6 +630,16 @@ var Pjax;
             }
             Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
             if (this.req.status !== 200) {
+              Pjax4.emit("error", {
+                href: this.href,
+                opts: this.opts,
+                reason: "status",
+                status: this.req.status
+              });
+              Pjax4.emit("complete", {
+                href: this.href,
+                opts: this.opts
+              });
               return this.redirect();
             }
             if (rul = this.req.responseURL) {
@@ -565,11 +647,29 @@ var Pjax;
               this.href = parsed.pathname + parsed.search;
             }
             if (!this.applyLoadedData()) {
+              Pjax4.emit("error", {
+                href: this.href,
+                opts: this.opts,
+                reason: "apply"
+              });
+              Pjax4.emit("complete", {
+                href: this.href,
+                opts: this.opts
+              });
               return this.redirect();
             }
             if (typeof this.opts.done === "function") {
               this.opts.done();
             }
+            Pjax4.emit("success", {
+              href: this.href,
+              opts: this.opts,
+              status: this.req.status
+            });
+            Pjax4.emit("complete", {
+              href: this.href,
+              opts: this.opts
+            });
             if (!(this.opts.scroll === false || Pjax4.shouldSkipScroll(this.opts.node))) {
               return window.requestAnimationFrame(function() {
                 return window.scrollTo({
@@ -638,8 +738,9 @@ var Pjax;
               return;
             }
             this.history_added = true;
-            if (Pjax4._lastHrefCheck === href) {
-              return window.history.replaceState({}, document.title, href);
+            if (this.opts.replace || Pjax4._lastHrefCheck === href) {
+              window.history.replaceState({}, document.title, href);
+              return Pjax4._lastHrefCheck = href;
             } else {
               window.history.pushState({}, document.title, href);
               return Pjax4._lastHrefCheck = href;
@@ -679,7 +780,11 @@ var Pjax;
           }
         });
       };
-      window.addEventListener("DOMContentLoaded", function() {
+      bindPjaxBoot = function() {
+        if (Pjax3._booted) {
+          return;
+        }
+        Pjax3._booted = true;
         setTimeout(Pjax3.sendGlobalEvent, 0);
         return document.body.addEventListener("submit", function(e) {
           var form, is_pjax, pjax_target;
@@ -693,7 +798,12 @@ var Pjax;
             });
           }
         });
-      });
+      };
+      if (document.readyState === "loading") {
+        window.addEventListener("DOMContentLoaded", bindPjaxBoot);
+      } else {
+        bindPjaxBoot();
+      }
       if (typeof module !== "undefined" && module.exports) {
         module.exports = Pjax3;
       }

@@ -980,3 +980,302 @@ describe 'PjaxOnClick', ->
       expect(openedTarget).to.equal '_blank'
     finally
       window.open = originalOpen
+
+  it 'treats relative path without scheme as pjax navigation', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="users" id="rel-link">Users</a>
+      </main>
+    '''
+    loadedArgs = null
+    opened = null
+    originalOpen = window.open
+    window.open = (url) -> opened = url
+    Pjax.load = (href, opts) -> loadedArgs = { href, opts }
+
+    try
+      link = document.getElementById('rel-link')
+      e = createClickEvent(target: link)
+      PjaxOnClick.main(e)
+      expect(opened).to.be.null
+      expect(loadedArgs).to.not.be.null
+      expect(loadedArgs.href).to.equal 'users'
+    finally
+      window.open = originalOpen
+
+  it 'data-confirm aborts navigation when confirm returns false', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/danger" data-confirm="Sure?" id="confirm-link">Delete</a>
+      </main>
+    '''
+    loadCalled = false
+    Pjax.load = -> loadCalled = true
+    originalConfirm = window.confirm
+    confirmedWith = null
+    window.confirm = (msg) -> confirmedWith = msg; false
+
+    try
+      link = document.getElementById('confirm-link')
+      e = createClickEvent(target: link)
+      PjaxOnClick.main(e)
+      expect(confirmedWith).to.equal 'Sure?'
+      expect(loadCalled).to.equal false
+    finally
+      window.confirm = originalConfirm
+
+  it 'data-confirm proceeds with navigation when confirm returns true', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/ok" data-confirm="Sure?" id="confirm-ok">Go</a>
+      </main>
+    '''
+    loadedHref = null
+    Pjax.load = (href) -> loadedHref = href
+    originalConfirm = window.confirm
+    window.confirm = -> true
+
+    try
+      link = document.getElementById('confirm-ok')
+      e = createClickEvent(target: link)
+      PjaxOnClick.main(e)
+      expect(loadedHref).to.equal '/ok'
+    finally
+      window.confirm = originalConfirm
+
+  it 'data-replace passes replace flag through to Pjax.load', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/replace-me" data-replace id="rep-link">Tab</a>
+      </main>
+    '''
+    loadedOpts = null
+    Pjax.load = (href, opts) -> loadedOpts = opts
+
+    link = document.getElementById('rep-link')
+    e = createClickEvent(target: link)
+    PjaxOnClick.main(e)
+    expect(loadedOpts.replace).to.equal true
+
+  it 'main works when invoked as a bare function (addEventListener style)', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/bare" id="bare-link">X</a>
+      </main>
+    '''
+    loadedHref = null
+    Pjax.load = (href) -> loadedHref = href
+
+    fn = PjaxOnClick.main
+    link = document.getElementById('bare-link')
+    e = createClickEvent(target: link)
+    fn(e)
+    expect(loadedHref).to.equal '/bare'
+
+  it 'Pjax.confirm receives message and trigger node', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/del" data-confirm="Sure?" data-yes="Delete" id="hooked">X</a>
+      </main>
+    '''
+    Pjax.load = ->
+    captured = null
+    Pjax.confirm = (msg, node) ->
+      captured = { msg, yesAttr: node.getAttribute('data-yes'), id: node.id }
+      false
+
+    link = document.getElementById('hooked')
+    e = createClickEvent(target: link)
+    PjaxOnClick.main(e)
+    expect(captured.msg).to.equal 'Sure?'
+    expect(captured.yesAttr).to.equal 'Delete'
+    expect(captured.id).to.equal 'hooked'
+
+  it 'Pjax.confirm Promise resolution defers navigation', (done) ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/async" data-confirm="?" id="async-link">X</a>
+      </main>
+    '''
+    loadCalledWith = null
+    Pjax.load = (href) -> loadCalledWith = href
+
+    resolveFn = null
+    Pjax.confirm = -> new Promise (resolve) -> resolveFn = resolve
+
+    link = document.getElementById('async-link')
+    e = createClickEvent(target: link)
+    PjaxOnClick.main(e)
+    expect(loadCalledWith).to.be.null
+    resolveFn(true)
+    setTimeout (->
+      expect(loadCalledWith).to.equal '/async'
+      done()
+    ), 0
+
+  it 'Pjax.confirm Promise resolving false drops navigation', (done) ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <a href="/no-go" data-confirm="?" id="no-link">X</a>
+      </main>
+    '''
+    loadCalled = false
+    Pjax.load = -> loadCalled = true
+
+    Pjax.confirm = -> Promise.resolve(false)
+
+    link = document.getElementById('no-link')
+    e = createClickEvent(target: link)
+    PjaxOnClick.main(e)
+    setTimeout (->
+      expect(loadCalled).to.equal false
+      done()
+    ), 0
+
+describe 'Pjax lifecycle events', ->
+  beforeEach ->
+    setupGlobals()
+
+  loadPjaxFresh = ->
+    delete require.cache[require.resolve('../src/pjax.coffee')]
+    require '../src/pjax.coffee'
+
+  it 'emit returns false when listener calls preventDefault', ->
+    Pjax = loadPjaxFresh()
+    handler = (e) -> e.preventDefault()
+    document.addEventListener 'pjax:before', handler
+
+    try
+      result = Pjax.emit 'before', href: '/x'
+      expect(result).to.equal false
+    finally
+      document.removeEventListener 'pjax:before', handler
+
+  it 'emit returns true when no listener prevents', ->
+    Pjax = loadPjaxFresh()
+    expect(Pjax.emit('before', href: '/x')).to.equal true
+
+  it 'instance load aborts when pjax:before listener prevents', ->
+    Pjax = loadPjaxFresh()
+    Pjax.before = -> true
+    handler = (e) -> e.preventDefault()
+    document.addEventListener 'pjax:before', handler
+    sentRequest = false
+    pjax = new Pjax(path: '/blocked-by-event')
+    pjax.sendRequest = -> sentRequest = true
+
+    try
+      pjax.load()
+      expect(sentRequest).to.equal false
+    finally
+      document.removeEventListener 'pjax:before', handler
+
+  it 'pjax:before detail carries href and opts', ->
+    Pjax = loadPjaxFresh()
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:before', handler
+
+    try
+      Pjax.emit 'before', href: '/foo', opts: { scroll: false }
+      expect(captured.href).to.equal '/foo'
+      expect(captured.opts.scroll).to.equal false
+    finally
+      document.removeEventListener 'pjax:before', handler
+
+  it 'fires pjax:error and pjax:complete on non-200 response', ->
+    Pjax = loadPjaxFresh()
+    fired = []
+    onError = (e) -> fired.push 'error:' + e.detail.status
+    onComplete = -> fired.push 'complete'
+    document.addEventListener 'pjax:error', onError
+    document.addEventListener 'pjax:complete', onComplete
+
+    try
+      pjax = new Pjax(path: '/missing')
+      pjax.req =
+        status: 404
+        getResponseHeader: -> null
+      pjax.opts.req_start_time = Date.now()
+      pjax.redirect = ->
+      pjax.handleResponse()
+      expect(fired).to.deep.equal ['error:404', 'complete']
+    finally
+      document.removeEventListener 'pjax:error', onError
+      document.removeEventListener 'pjax:complete', onComplete
+
+  it 'fires pjax:success and pjax:complete on successful response', ->
+    Pjax = loadPjaxFresh()
+    originalPush = window.history.pushState
+    originalReplace = window.history.replaceState
+    window.history.pushState = ->
+    window.history.replaceState = ->
+
+    fired = []
+    onSuccess = -> fired.push 'success'
+    onComplete = -> fired.push 'complete'
+    document.addEventListener 'pjax:success', onSuccess
+    document.addEventListener 'pjax:complete', onComplete
+
+    try
+      pjax = new Pjax(path: '/ok')
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="pjax"><p>ok</p></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.opts.req_start_time = Date.now()
+      pjax.handleResponse()
+      expect(fired).to.deep.equal ['success', 'complete']
+    finally
+      document.removeEventListener 'pjax:success', onSuccess
+      document.removeEventListener 'pjax:complete', onComplete
+      window.history.pushState = originalPush
+      window.history.replaceState = originalReplace
+
+  it 'opts.replace forces replaceState instead of pushState', ->
+    Pjax = loadPjaxFresh()
+    pushed = null
+    replaced = null
+    originalPush = window.history.pushState
+    originalReplace = window.history.replaceState
+    window.history.pushState = (s, t, url) -> pushed = url
+    window.history.replaceState = (s, t, url) -> replaced = url
+
+    try
+      Pjax._lastHrefCheck = '/something-else'
+      pjax = new Pjax(path: '/replace-target', replace: true)
+      pjax.historyAddCurrent('/replace-target')
+      expect(replaced).to.equal '/replace-target'
+      expect(pushed).to.be.null
+    finally
+      window.history.pushState = originalPush
+      window.history.replaceState = originalReplace
+
+describe 'Form serialization (no Z dependency)', ->
+  beforeEach ->
+    setupGlobals()
+
+  it 'getOpts serializes form with native FormData', ->
+    delete require.cache[require.resolve('../src/pjax.coffee')]
+    Pjax = require '../src/pjax.coffee'
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <form id="f" action="/submit">
+          <input name="name" value="Anna">
+          <input name="age" value="33">
+        </form>
+      </main>
+    '''
+    form = document.getElementById('f')
+    opts = Pjax.getOpts '/submit', form: form
+    expect(opts.path).to.include 'name=Anna'
+    expect(opts.path).to.include 'age=33'
