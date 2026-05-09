@@ -26,8 +26,6 @@
   }
 </script>
 
-<code>{state.token}</code>
-
 <style>
   display: inline-block;
   font-family: ui-monospace, SFMono-Regular, monospace;
@@ -40,3 +38,5 @@
     color: #0f172a;
   }
 </style>
+
+<code>{state.token}</code>

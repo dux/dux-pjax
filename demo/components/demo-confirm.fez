@@ -35,18 +35,6 @@
   }
 </script>
 
-<div class="overlay" class:hidden={!state.open} onclick="fez.pick(false)">
-  {#if state.open}
-    <div class="dialog" onclick="event.stopPropagation()">
-      <p>{state.message}</p>
-      <div class="actions">
-        <button class="ghost" onclick="fez.pick(false)">{state.no}</button>
-        <button class="primary" onclick="fez.pick(true)">{state.yes}</button>
-      </div>
-    </div>
-  {/if}
-</div>
-
 <style>
   .overlay {
     position: fixed;
@@ -96,3 +84,15 @@
     }
   }
 </style>
+
+<div class="overlay" class:hidden={!state.open} onclick="fez.pick(false)">
+  {#if state.open}
+    <div class="dialog" onclick="event.stopPropagation()">
+      <p>{state.message}</p>
+      <div class="actions">
+        <button class="ghost" onclick="fez.pick(false)">{state.no}</button>
+        <button class="primary" onclick="fez.pick(true)">{state.yes}</button>
+      </div>
+    </div>
+  {/if}
+</div>

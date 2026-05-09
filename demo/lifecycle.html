@@ -3,17 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>dux-pjax · Lifecycle</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="styles.css" />
-    <script src="https://dux.github.io/fez/dist/fez.js"></script>
-    <script fez="components/demo-menu.fez"></script>
-    <script fez="components/demo-api.fez"></script>
-    <script fez="components/demo-event-log.fez"></script>
-    <script fez="components/demo-counter.fez"></script>
-    <script fez="components/demo-confirm.fez"></script>
-    <script fez="components/random-str.fez"></script>
-    <script defer src="../dist/pjax.global.js"></script>
-    <script defer src="demo-boot.js"></script>
+    <script src="demo-head.js"></script>
   </head>
   <body>
     <div class="shell">
@@ -48,7 +38,7 @@
             <p>The cancellation hook is <code>Pjax.before(href, opts)</code>. Return <code>false</code> to abort — no XHR, no <code>pjax:render</code>.</p>
             <div class="row">
               <button onclick="armCancel()">Arm Pjax.before to block once</button>
-              <button onclick="Pjax.load('load.html')">Try to load Load</button>
+              <button onclick="Pjax.load('load')">Try to load Load</button>
             </div>
             <p id="cancel-state" class="timestamp">cancel armed: no</p>
             <script pjax-delay>

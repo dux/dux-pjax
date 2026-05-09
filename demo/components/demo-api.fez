@@ -40,6 +40,33 @@
   }
 </script>
 
+<style>
+  .api {
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.88rem;
+      vertical-align: top;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+    code {
+      background: #f1f5f9;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+    }
+  }
+</style>
+
 <div class="api">
   <h3>Methods</h3>
   <table>
@@ -71,30 +98,3 @@
     </tbody>
   </table>
 </div>
-
-<style>
-  .api {
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 1.5rem;
-    }
-    th, td {
-      text-align: left;
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid #e5e7eb;
-      font-size: 0.88rem;
-      vertical-align: top;
-    }
-    th {
-      background: #f1f5f9;
-      font-weight: 600;
-    }
-    code {
-      background: #f1f5f9;
-      padding: 0.1rem 0.35rem;
-      border-radius: 4px;
-      font-size: 0.82rem;
-    }
-  }
-</style>

@@ -3,17 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>dux-pjax · Load</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="styles.css" />
-    <script src="https://dux.github.io/fez/dist/fez.js"></script>
-    <script fez="components/demo-menu.fez"></script>
-    <script fez="components/demo-api.fez"></script>
-    <script fez="components/demo-event-log.fez"></script>
-    <script fez="components/demo-counter.fez"></script>
-    <script fez="components/demo-confirm.fez"></script>
-    <script fez="components/random-str.fez"></script>
-    <script defer src="../dist/pjax.global.js"></script>
-    <script defer src="demo-boot.js"></script>
+    <script src="demo-head.js"></script>
   </head>
   <body>
     <div class="shell">
@@ -32,9 +22,9 @@
             <h3>Buttons</h3>
             <p>Same effect as a hijacked link click — issues an XHR, applies the response, pushes history.</p>
             <div class="row">
-              <button onclick="Pjax.load('load.html')">Re-load this page</button>
-              <button onclick="Pjax.load('refresh.html')">Load Refresh</button>
-              <button onclick="Pjax.load('forms.html')">Load Forms</button>
+              <button onclick="Pjax.load('load')">Re-load this page</button>
+              <button onclick="Pjax.load('refresh')">Load Refresh</button>
+              <button onclick="Pjax.load('forms')">Load Forms</button>
             </div>
             <p>Render token: <random-str></random-str></p>
           </section>
@@ -43,8 +33,8 @@
             <h3>Same-href debounce</h3>
             <p>Within ~2&nbsp;seconds of the previous navigation to the same path, <code>Pjax.load</code> is dropped silently. <code>Pjax.refresh</code> and <code>Pjax.reload</code> bypass it; pass <code>{ force: true }</code> to bypass from <code>load</code> too.</p>
             <div class="row">
-              <button onclick="dbClick('load.html', false)">Click me twice fast</button>
-              <button class="secondary" onclick="dbClick('load.html', true)">Same, with <code>force: true</code></button>
+              <button onclick="dbClick('load', false)">Click me twice fast</button>
+              <button class="secondary" onclick="dbClick('load', true)">Same, with <code>force: true</code></button>
             </div>
             <p class="timestamp">
               clicks: <strong id="db-clicks">0</strong> ·
@@ -87,7 +77,7 @@
           <section>
             <h3>pjax-replace</h3>
             <p>Use <code>history.replaceState</code> instead of pushing a new entry — the back button skips the page.</p>
-            <a href="refresh.html" pjax-replace>→ Go to Refresh (replaceState)</a>
+            <a href="refresh" pjax-replace>→ Go to Refresh (replaceState)</a>
           </section>
         </main>
         <demo-event-log></demo-event-log>

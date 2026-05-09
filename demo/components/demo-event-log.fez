@@ -13,8 +13,11 @@
 
   class {
     init() {
-      this.state.entries = Fez.localStorage.get(STORAGE_KEY, [])
-      this.state.mountTime = Date.now()
+      this.state.entries = Fez.localStorage.get(STORAGE_KEY, []).map((entry) => ({
+        ...entry,
+        fresh: false,
+      }))
+      this._freshTimers = {}
       this._seq = 0
     }
 
@@ -25,6 +28,30 @@
 
     onDestroy() {
       document.removeEventListener('pjax:render', this.handler)
+      this.clearFreshTimers()
+    }
+
+    persist() {
+      Fez.localStorage.set(STORAGE_KEY, this.state.entries.map((entry) => {
+        const clean = { ...entry }
+        delete clean.fresh
+        return clean
+      }))
+    }
+
+    clearFreshTimers() {
+      Object.values(this._freshTimers || {}).forEach((timer) => clearTimeout(timer))
+      this._freshTimers = {}
+    }
+
+    settle(id, event) {
+      if (event && event.target !== event.currentTarget) return
+      clearTimeout(this._freshTimers[id])
+      delete this._freshTimers[id]
+      const current = this.state.entries.find((e) => e.id === id)
+      if (!current || !current.fresh) return
+      current.fresh = false
+      this.refresh()
     }
 
     push(detail) {
@@ -41,20 +68,138 @@
         to:       detail.to || '',
         mode:     detail.mode || 'full',
         duration: detail.duration || 0,
+        fresh:    true,
       }
       this.state.entries.unshift(entry)
       if (this.state.entries.length > MAX) this.state.entries.length = MAX
-      Fez.localStorage.set(STORAGE_KEY, this.state.entries)
+      this.persist()
       this.refresh()
+
+      clearTimeout(this._freshTimers[id])
+      this._freshTimers[id] = setTimeout(() => this.settle(id), 1000)
     }
 
     clear() {
+      this.clearFreshTimers()
       this.state.entries.length = 0
-      Fez.localStorage.set(STORAGE_KEY, this.state.entries)
+      this.persist()
       this.refresh()
     }
   }
 </script>
+
+<style>
+  :fez {
+    .log {
+      background: #fff;
+      border-radius: 0.85rem;
+      padding: 1rem;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      font-size: 0.78rem;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
+      position: sticky;
+      top: 1rem;
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 0 0 0.5rem 0;
+        padding: 0;
+        background: none;
+        color: inherit;
+        height: auto;
+
+        h3 {
+          margin: 0;
+          font-size: 0.95rem;
+        }
+        button {
+          padding: 0.2rem 0.6rem;
+          font-size: 0.72rem;
+        }
+      }
+
+      .rows { display: flex; flex-direction: column; }
+
+      .row-wrap {
+        display: grid;
+        grid-template-rows: 1fr;
+        overflow: hidden;
+      }
+
+      .row-wrap.fresh {
+        animation: log-in 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+        will-change: grid-template-rows;
+      }
+
+      .row-wrap.fresh .row {
+        animation: log-content-in 0.28s ease-out both;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 108px 50px 30px 1fr 50px;
+        gap: 0.4rem;
+        padding: 0.3rem 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        align-items: center;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .time { color: #94a3b8; }
+      .mode {
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.05em;
+        text-align: center;
+        border-radius: 4px;
+        padding: 0.1rem 0;
+        font-weight: 700;
+      }
+      .mode[data-mode="full"]   { background: #dbeafe; color: #1d4ed8; }
+      .mode[data-mode="target"] { background: #ede9fe; color: #6d28d9; }
+      .mode[data-mode="ajax"]   { background: #cffafe; color: #0e7490; }
+
+      .status {
+        font-weight: 600;
+      }
+      .status[data-ok="yes"] { color: #16a34a; }
+      .status[data-ok="no"]  { color: #dc2626; }
+
+      .path { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .dur { color: #94a3b8; text-align: right; font-size: 0.72rem; }
+
+      .empty { color: #94a3b8; margin: 0.5rem 0; }
+    }
+  }
+
+  @keyframes log-in {
+    0% {
+      grid-template-rows: 0fr;
+    }
+    60% {
+      grid-template-rows: 1fr;
+    }
+    100% {
+      grid-template-rows: 1fr;
+    }
+  }
+
+  @keyframes log-content-in {
+    0% {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>
 
 <div class="log">
   <header>
@@ -63,120 +208,17 @@
   </header>
   <div class="rows">
     {#each state.entries as e}
-      <div id="evt-{e.id}" class="row" class:fresh={e.ts > state.mountTime} class:err={e.error}>
-        <span class="time">{e.time}</span>
-        <span class="mode" data-mode={e.mode}>{e.mode}</span>
-        <span class="status" data-ok={e.error ? 'no' : 'yes'}>{e.status}{e.error ? ' ' + e.error : ''}</span>
-        <span class="path">{e.to}</span>
-        <span class="dur">{e.duration}ms</span>
+      <div id="evt-{e.id}" key={e.id} class="row-wrap" class:fresh={e.fresh} onanimationend="fez.settle('{e.id}', event)">
+        <div class="row" class:err={e.error}>
+          <span class="time">{e.time}</span>
+          <span class="mode" data-mode={e.mode}>{e.mode}</span>
+          <span class="status" data-ok={e.error ? 'no' : 'yes'}>{e.status}{e.error ? ' ' + e.error : ''}</span>
+          <span class="path">{e.to}</span>
+          <span class="dur">{e.duration}ms</span>
+        </div>
       </div>
     {:else}
       <p class="empty">No events yet — click the menu</p>
     {/each}
   </div>
 </div>
-
-<style>
-  display: block;
-
-  .log {
-    background: #fff;
-    border-radius: 0.85rem;
-    padding: 1rem;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-    font-size: 0.78rem;
-    max-height: calc(100vh - 160px);
-    overflow-y: auto;
-    position: sticky;
-    top: 1rem;
-  }
-
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 0 0 0.5rem 0;
-    padding: 0;
-    background: none;
-    color: inherit;
-    height: auto;
-
-    h3 {
-      margin: 0;
-      font-size: 0.95rem;
-    }
-    button {
-      padding: 0.2rem 0.6rem;
-      font-size: 0.72rem;
-    }
-  }
-
-  .rows { display: flex; flex-direction: column; }
-
-  .row {
-    display: grid;
-    grid-template-columns: 78px 50px 90px 1fr 50px;
-    gap: 0.4rem;
-    padding: 0.3rem 0;
-    border-bottom: 1px solid #f1f5f9;
-    font-family: ui-monospace, SFMono-Regular, monospace;
-    align-items: center;
-  }
-
-  .row.fresh {
-    animation: log-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
-    transform-origin: top;
-  }
-
-  @keyframes log-in {
-    0% {
-      opacity: 0;
-      max-height: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      background: rgba(37, 99, 235, 0.18);
-      transform: translateX(8px);
-    }
-    40% {
-      opacity: 1;
-      max-height: 2rem;
-      padding-top: 0.3rem;
-      padding-bottom: 0.3rem;
-      background: rgba(37, 99, 235, 0.18);
-      transform: translateX(0);
-    }
-    100% {
-      opacity: 1;
-      max-height: 2rem;
-      padding-top: 0.3rem;
-      padding-bottom: 0.3rem;
-      background: transparent;
-      transform: translateX(0);
-    }
-  }
-
-  .time { color: #94a3b8; }
-  .mode {
-    text-transform: uppercase;
-    font-size: 0.65rem;
-    letter-spacing: 0.05em;
-    text-align: center;
-    border-radius: 4px;
-    padding: 0.1rem 0;
-    font-weight: 700;
-  }
-  .mode[data-mode="full"]   { background: #dbeafe; color: #1d4ed8; }
-  .mode[data-mode="target"] { background: #ede9fe; color: #6d28d9; }
-  .mode[data-mode="ajax"]   { background: #cffafe; color: #0e7490; }
-
-  .status {
-    font-weight: 600;
-  }
-  .status[data-ok="yes"] { color: #16a34a; }
-  .status[data-ok="no"]  { color: #dc2626; }
-
-  .path { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dur { color: #94a3b8; text-align: right; font-size: 0.72rem; }
-
-  .empty { color: #94a3b8; margin: 0.5rem 0; }
-</style>

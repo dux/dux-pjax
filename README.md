@@ -1,5 +1,7 @@
 # dux-pjax
 
+**Live demo:** [dux.github.io/dux-pjax/](https://dux.github.io/dux-pjax/)
+
 `dux-pjax` is a lightweight PJAX helper. PJAX (PushState + AJAX) renders a new HTML response into the current page instead of performing a hard navigation. You preserve browser history, avoid expensive asset reloads, and keep any UI state that lives outside the refreshed container. This package focuses on the common pattern of replacing your `<main>` (or any container you choose) with the server-rendered markup coming from a standard controller action.
 
 At a glance:

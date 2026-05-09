@@ -3,17 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>dux-pjax · Forms</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="styles.css" />
-    <script src="https://dux.github.io/fez/dist/fez.js"></script>
-    <script fez="components/demo-menu.fez"></script>
-    <script fez="components/demo-api.fez"></script>
-    <script fez="components/demo-event-log.fez"></script>
-    <script fez="components/demo-counter.fez"></script>
-    <script fez="components/demo-confirm.fez"></script>
-    <script fez="components/random-str.fez"></script>
-    <script defer src="../dist/pjax.global.js"></script>
-    <script defer src="demo-boot.js"></script>
+    <script src="demo-head.js"></script>
     <style>
       .target-box {
         border: 2px dashed #cbd5e1;
@@ -39,11 +29,11 @@
           <section>
             <h3>Full-swap form</h3>
             <p><code>data-pjax="true"</code> swaps the response into <code>#pjax</code> like a regular <code>Pjax.load</code>.</p>
-            <form data-pjax="true" action="qs.html">
+            <form data-pjax="true" action="qs">
               <label>Set <code>foo</code> in the URL</label>
               <div class="row">
                 <input name="foo" type="text" placeholder="bar" />
-                <button type="submit">Submit (full swap to qs.html)</button>
+                <button type="submit">Submit (full swap to qs)</button>
               </div>
             </form>
             <p class="hint">After submit, you'll land on the Query string page and see <code>?foo=…</code> reflected there.</p>
@@ -52,7 +42,7 @@
           <section>
             <h3>Targeted form</h3>
             <p><code>data-pjax="#form-out"</code> swaps the response's matching node into <code>#form-out</code>. URL is not pushed.</p>
-            <form data-pjax="#form-out" action="forms.html">
+            <form data-pjax="#form-out" action="forms">
               <label>Type a value, submit, watch <code>#form-out</code> refresh</label>
               <div class="row">
                 <input name="anything" type="text" placeholder="anything" />

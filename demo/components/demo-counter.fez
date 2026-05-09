@@ -21,13 +21,6 @@
   }
 </script>
 
-<div>
-  <strong>{state.label}:</strong>
-  <button onclick="fez.dec()">−</button>
-  <span class="value">{state.count}</span>
-  <button onclick="fez.inc()">+</button>
-</div>
-
 <style>
   display: inline-flex;
   align-items: center;
@@ -54,3 +47,10 @@
     box-shadow: none;
   }
 </style>
+
+<div>
+  <strong>{state.label}:</strong>
+  <button onclick="fez.dec()">−</button>
+  <span class="value">{state.count}</span>
+  <button onclick="fez.inc()">+</button>
+</div>
