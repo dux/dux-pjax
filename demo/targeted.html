@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax · Targeted</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://dux.github.io/fez/dist/fez.js"></script>
+    <script fez="components/demo-menu.fez"></script>
+    <script fez="components/demo-api.fez"></script>
+    <script fez="components/demo-event-log.fez"></script>
+    <script fez="components/demo-counter.fez"></script>
+    <script fez="components/demo-confirm.fez"></script>
+    <script fez="components/random-str.fez"></script>
+    <script defer src="../dist/pjax.global.js"></script>
+    <script defer src="demo-boot.js"></script>
+    <style>
+      .target-box {
+        border: 2px dashed #cbd5e1;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 0.75rem;
+        min-height: 80px;
+      }
+      .target-box .empty { color: #94a3b8; margin: 0; }
+      .ajax-region {
+        border: 2px dashed #6366f1;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <h1>dux-pjax</h1>
+        <demo-menu></demo-menu>
+      </header>
+      <div class="layout">
+        <main id="pjax" class="pjax">
+          <section class="hero">
+            <h2>Targeted swaps</h2>
+            <p>Swap a specific node by selector instead of the whole <code>#pjax</code> body. URL stays put; scroll preserved.</p>
+          </section>
+
+          <section>
+            <h3>pjax-target on a link</h3>
+            <p>The response's matching <code>id</code> is morphed into the live <code>#out1</code> instead of <code>#pjax</code>.</p>
+            <div class="row">
+              <a href="refresh.html" pjax-target="#out1">Load Refresh into #out1</a>
+              <a href="forms.html" pjax-target="#out1">Load Forms into #out1</a>
+            </div>
+            <div id="out1" class="target-box">
+              <p class="empty">#out1 — content lands here</p>
+            </div>
+          </section>
+
+          <section>
+            <h3>.ajax region</h3>
+            <p>Links inside an element with class <code>ajax</code> automatically target that region. <code>data-path</code> on the region holds its current path so <code>Pjax.refresh(node)</code> works.</p>
+            <div class="ajax ajax-region" id="region1" data-path="qs.html">
+              <p><a href="qs.html">Load qs.html into this region</a></p>
+              <p><a href="forms.html">Load forms.html into this region</a></p>
+              <p><em>Region's <code>data-path</code> is updated on every load.</em></p>
+            </div>
+          </section>
+
+          <section>
+            <h3>Programmatic</h3>
+            <p>Pass a target selector string as the second argument to <code>Pjax.load</code>:</p>
+<pre><code>Pjax.load('refresh.html', '#out1')</code></pre>
+            <button onclick="Pjax.load('refresh.html', '#out1')">Run it</button>
+          </section>
+        </main>
+        <demo-event-log></demo-event-log>
+      </div>
+    </div>
+  </body>
+</html>

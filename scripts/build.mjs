@@ -36,16 +36,22 @@ const shared = {
   target: ['es2018']
 }
 
-const targets = [
-  { format: 'esm', outfile: 'index.js' },
-  { format: 'cjs', outfile: 'index.cjs' },
+const baseTargets = [
+  { format: 'esm', outfile: 'index.js', minfile: 'index.min.js' },
+  { format: 'cjs', outfile: 'index.cjs', minfile: 'index.min.cjs' },
   {
     format: 'iife',
     outfile: 'pjax.global.js',
+    minfile: 'pjax.global.min.js',
     banner: { js: 'var Pjax;' },
     footer: { js: 'if (typeof window !== "undefined") Pjax = window.Pjax;' }
   }
 ]
+
+const targets = baseTargets.flatMap(({ minfile, ...target }) => [
+  target,
+  { ...target, outfile: minfile, minify: true }
+])
 
 const args = process.argv.slice(2)
 const isWatch = args.includes('--watch') || args.includes('-w')
@@ -75,6 +81,7 @@ async function main() {
     }
 
     console.log('PJAX build watching... (press Ctrl+C to stop)')
+    console.log('Demo: run `bun run demo` (or `npm run demo`) and open http://localhost:8000/demo/')
 
     const shutdown = async () => {
       await Promise.all(contexts.map((ctx) => ctx.dispose()))

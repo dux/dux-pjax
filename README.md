@@ -180,21 +180,42 @@ Pjax.confirm = (message, node) => {
 When the hook returns a Promise, the click is held; once it resolves, the navigation either proceeds or is dropped silently.
 
 ### Lifecycle events
-All events bubble from `document`. `pjax:before` is cancellable — call `event.preventDefault()` to abort the navigation.
+Two events bubble from `document`:
 
-| Event | When | `event.detail` |
-| --- | --- | --- |
-| `pjax:before` | After click/form intercept, before XHR fires | `{ href, opts }` |
-| `pjax:start` | Right before `XMLHttpRequest.send()` | `{ href, opts }` |
-| `pjax:success` | After response applied successfully | `{ href, opts, status }` |
-| `pjax:error` | Network error, timeout, non-200, or apply failure | `{ href, opts, reason, status? }` |
-| `pjax:complete` | Always, after success or error | `{ href, opts }` |
-| `pjax:render` | After DOM swap completes (full or targeted) | – |
+- **`pjax:start`** — fires right before `XMLHttpRequest.send()`. Useful for showing a top progress bar / spinner.
+- **`pjax:render`** — fires once per navigation, after the response has been applied (or after the request failed). Useful for analytics, focus management, post-render bootstrapping.
+
+`event.detail` shape:
+
+| Field | When | Type | Description |
+| --- | --- | --- | --- |
+| `from` | both | `string \| null` | Previous path; `null` on initial load. |
+| `to` | both | `string` | The path being navigated to. |
+| `mode` | both | `string` | `'full'`, `'target'`, or `'ajax'` — which swap path is being used. |
+| `opts` | both | `object` | The original options bag the navigation was started with. |
+| `status` | render only | `number` | HTTP status code, or `0` for network/timeout errors. |
+| `error` | render only | `string \| null` | `null` on success; `'network'`, `'timeout'`, `'status'`, or `'apply'` on failure. |
+| `duration` | render only | `number` | Wall-clock ms from request start to render. |
+
+```js
+document.addEventListener('pjax:start', (e) => {
+  showSpinner(e.detail.to)
+})
+
+document.addEventListener('pjax:render', (e) => {
+  hideSpinner()
+  const { status, error, to, mode, duration } = e.detail
+  if (error) console.warn('navigation failed:', error, status, to)
+  else       console.log('rendered', to, 'in', duration, 'ms')
+})
+```
+
+To **cancel** a navigation before it starts, override `Pjax.before(href, opts)` and return `false` (see the API table above). Cancelled navigations fire neither `pjax:start` nor `pjax:render`.
 
 ### DOM helpers
 - `Pjax.parseScripts(htmlOrNode)` replays inline scripts (respecting the `pjax-delay` attribute for deferred execution via `requestAnimationFrame`).
-- `Pjax.sendGlobalEvent()` emits `pjax:render` on `document` after a successful render.
-- `Pjax.emit(name, detail)` dispatches a cancellable `pjax:<name>` event and returns `false` if a listener prevented it.
+- `Pjax.sendGlobalEvent()` emits `pjax:render` with default detail (used internally for the initial page load).
+- `Pjax.emit(name, detail)` dispatches a cancellable custom `pjax:<name>` event and returns `false` if a listener called `preventDefault()`. Useful for app-level events; the lib itself only emits `pjax:render`.
 - The module keeps a small in-memory cache (`Pjax.historyData`) that powers instant back/forward restores.
 
 ### Inline script execution order

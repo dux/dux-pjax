@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax · Confirm</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://dux.github.io/fez/dist/fez.js"></script>
+    <script fez="components/demo-menu.fez"></script>
+    <script fez="components/demo-api.fez"></script>
+    <script fez="components/demo-event-log.fez"></script>
+    <script fez="components/demo-counter.fez"></script>
+    <script fez="components/demo-confirm.fez"></script>
+    <script fez="components/random-str.fez"></script>
+    <script defer src="../dist/pjax.global.js"></script>
+    <script defer src="demo-boot.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <h1>dux-pjax</h1>
+        <demo-menu></demo-menu>
+      </header>
+      <div class="layout">
+        <main id="pjax" class="pjax">
+          <section class="hero">
+            <h2>Confirm hook</h2>
+            <p><code>pjax-confirm</code> on a link prompts before navigating. Override <code>Pjax.confirm</code> for a custom modal — return a Promise to hold the click while the user decides.</p>
+          </section>
+
+          <section>
+            <h3>Custom modal (this demo)</h3>
+            <p>The demo's boot script wires:</p>
+<pre><code>Pjax.confirm = (msg, node) =&gt; window.DemoConfirm.ask(msg, node)</code></pre>
+            <p>Where <code>&lt;demo-confirm&gt;</code> is a fez singleton (see <code>demo/components/demo-confirm.fez</code>).</p>
+            <div class="row">
+              <a href="refresh.html"
+                 pjax-confirm="Navigate to the Refresh page?"
+                 pjax-yes="Go" pjax-no="Stay">Confirm + Refresh</a>
+              <a href="lifecycle.html"
+                 pjax-confirm="Are you sure you want to leave the Confirm demo?">Confirm + Lifecycle</a>
+            </div>
+          </section>
+
+          <section>
+            <h3>API</h3>
+<pre><code>Pjax.confirm = (message, node) =&gt; {
+  const yes = node.getAttribute('pjax-yes') || 'Confirm'
+  const no  = node.getAttribute('pjax-no')  || 'Cancel'
+  return new Promise(resolve =&gt; {
+    myModal.show({
+      message, yes, no,
+      onConfirm: () =&gt; resolve(true),
+      onCancel:  () =&gt; resolve(false),
+    })
+  })
+}</code></pre>
+            <p>Returning a non-Promise boolean is also fine — the click resolves synchronously.</p>
+          </section>
+
+          <section>
+            <h3>Default behavior</h3>
+            <p>Without an override, <code>Pjax.confirm</code> calls <code>window.confirm</code>:</p>
+<pre><code>&lt;a href="/users/42" pjax-confirm="Delete this user?"&gt;Delete&lt;/a&gt;</code></pre>
+          </section>
+        </main>
+        <demo-event-log></demo-event-log>
+      </div>
+    </div>
+  </body>
+</html>

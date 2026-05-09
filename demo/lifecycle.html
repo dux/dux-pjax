@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax · Lifecycle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://dux.github.io/fez/dist/fez.js"></script>
+    <script fez="components/demo-menu.fez"></script>
+    <script fez="components/demo-api.fez"></script>
+    <script fez="components/demo-event-log.fez"></script>
+    <script fez="components/demo-counter.fez"></script>
+    <script fez="components/demo-confirm.fez"></script>
+    <script fez="components/random-str.fez"></script>
+    <script defer src="../dist/pjax.global.js"></script>
+    <script defer src="demo-boot.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <h1>dux-pjax</h1>
+        <demo-menu></demo-menu>
+      </header>
+      <div class="layout">
+        <main id="pjax" class="pjax">
+          <section class="hero">
+            <h2>Lifecycle</h2>
+            <p>One event, one hook: <code>pjax:render</code> fires once per navigation, and <code>Pjax.before</code> can cancel one before it starts.</p>
+          </section>
+
+          <section>
+            <h3>The event</h3>
+            <p><code>pjax:render</code> is dispatched on <code>document</code> for every navigation — success or failure. <code>event.detail</code> carries everything you need:</p>
+<pre><code>{
+  from:     '/old/path',  // previous path, null on initial load
+  to:       '/new/path',  // navigation target
+  status:   200,          // HTTP status, 0 for network/timeout
+  error:    null,         // 'network' | 'timeout' | 'status' | 'apply' on failure
+  duration: 145,          // ms, request start → render
+  mode:     'full',       // 'full' | 'target' | 'ajax'
+  opts:     { … },        // the original options bag
+}</code></pre>
+            <p>Trigger anything from the menu and watch the panel on the right.</p>
+          </section>
+
+          <section>
+            <h3>Cancel a navigation</h3>
+            <p>The cancellation hook is <code>Pjax.before(href, opts)</code>. Return <code>false</code> to abort — no XHR, no <code>pjax:render</code>.</p>
+            <div class="row">
+              <button onclick="armCancel()">Arm Pjax.before to block once</button>
+              <button onclick="Pjax.load('load.html')">Try to load Load</button>
+            </div>
+            <p id="cancel-state" class="timestamp">cancel armed: no</p>
+            <script pjax-delay>
+              window._cancelArmed = false
+              window.armCancel = function () {
+                if (window._cancelArmed) return
+                window._cancelArmed = true
+                const prev = Pjax.before
+                Pjax.before = (href, opts) => {
+                  Pjax.before = prev
+                  window._cancelArmed = false
+                  const s = document.getElementById('cancel-state')
+                  if (s) s.textContent = 'last attempt: cancelled by Pjax.before (href=' + href + ')'
+                  return false
+                }
+                const s = document.getElementById('cancel-state')
+                if (s) s.textContent = 'cancel armed: yes — click any link/button next'
+              }
+            </script>
+          </section>
+
+          <section>
+            <h3>Listening</h3>
+<pre><code>document.addEventListener('pjax:render', (e) =&gt; {
+  const { status, error, to, mode, duration } = e.detail
+  if (error) console.warn('navigation failed:', error, status, to)
+  else       console.log('rendered', to, 'in', duration, 'ms')
+})</code></pre>
+          </section>
+        </main>
+        <demo-event-log></demo-event-log>
+      </div>
+    </div>
+  </body>
+</html>

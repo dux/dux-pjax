@@ -213,8 +213,20 @@ var require_pjax = __commonJS({
           return window.history.replaceState({}, document.title, href);
         }
         static sendGlobalEvent() {
+          return Pjax4._dispatchRender({
+            from: null,
+            to: Pjax4.path(),
+            status: 200,
+            error: null,
+            duration: 0,
+            mode: "full",
+            opts: {}
+          });
+        }
+        static _dispatchRender(detail) {
           return document.dispatchEvent(new CustomEvent("pjax:render", {
-            bubbles: true
+            bubbles: true,
+            detail
           }));
         }
         static emit(name, detail) {
@@ -365,8 +377,7 @@ var require_pjax = __commonJS({
           if (new_body = node.querySelector("#" + pjaxNode.id)) {
             finish = () => {
               this.morphInto(pjaxNode, this.parseScripts(new_body));
-              this.after(href);
-              return this.sendGlobalEvent();
+              return this.after(href);
             };
             if (this.useViewTransition && document.startViewTransition) {
               return document.startViewTransition(finish);
@@ -493,6 +504,29 @@ var require_pjax = __commonJS({
           }
           return false;
         }
+        swapMode() {
+          if (this.opts.target) {
+            return "target";
+          }
+          if (this.opts.ajax_node) {
+            return "ajax";
+          }
+          return "full";
+        }
+        emitDone(extra = {}) {
+          var detail, duration;
+          duration = this.opts.req_start_time ? Date.now() - this.opts.req_start_time : 0;
+          detail = Object.assign({
+            from: Pjax4.pastHref || null,
+            to: this.href,
+            status: null,
+            error: null,
+            duration,
+            mode: this.swapMode(),
+            opts: this.opts
+          }, extra);
+          return Pjax4._dispatchRender(detail);
+        }
         load() {
           var currentEntry, e, el, i, len, node, now, ref;
           if (!this.href) {
@@ -516,12 +550,6 @@ var require_pjax = __commonJS({
             return window.open(this.href);
           }
           if (Pjax4.before(this.href, this.opts) === false) {
-            return;
-          }
-          if (Pjax4.emit("before", {
-            href: this.href,
-            opts: this.opts
-          }) === false) {
             return;
           }
           if (location.hash && location.pathname === this.href) {
@@ -570,12 +598,14 @@ var require_pjax = __commonJS({
         }
         sendRequest() {
           var headers, k, v;
-          Pjax4.emit("start", {
-            href: this.href,
-            opts: this.opts
-          });
           this.opts.req_start_time = Date.now();
           this.opts.path = this.href;
+          Pjax4.emit("start", {
+            from: Pjax4.pastHref || null,
+            to: this.href,
+            mode: this.swapMode(),
+            opts: this.opts
+          });
           headers = {
             "x-requested-with": "XMLHttpRequest"
           };
@@ -587,27 +617,17 @@ var require_pjax = __commonJS({
           this.req.onerror = (e) => {
             Pjax4.error("Net error: Server response not received (Pjax)");
             console.error(e);
-            Pjax4.emit("error", {
-              href: this.href,
-              opts: this.opts,
-              reason: "network"
-            });
-            return Pjax4.emit("complete", {
-              href: this.href,
-              opts: this.opts
+            return this.emitDone({
+              status: 0,
+              error: "network"
             });
           };
           this.req.ontimeout = () => {
             Pjax4.request = null;
             Pjax4.error(`Request timeout: ${this.href}`);
-            Pjax4.emit("error", {
-              href: this.href,
-              opts: this.opts,
-              reason: "timeout"
-            });
-            Pjax4.emit("complete", {
-              href: this.href,
-              opts: this.opts
+            this.emitDone({
+              status: 0,
+              error: "timeout"
             });
             return this.redirect();
           };
@@ -632,15 +652,9 @@ var require_pjax = __commonJS({
           }
           Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
           if (this.req.status !== 200) {
-            Pjax4.emit("error", {
-              href: this.href,
-              opts: this.opts,
-              reason: "status",
-              status: this.req.status
-            });
-            Pjax4.emit("complete", {
-              href: this.href,
-              opts: this.opts
+            this.emitDone({
+              status: this.req.status,
+              error: "status"
             });
             return this.redirect();
           }
@@ -649,28 +663,17 @@ var require_pjax = __commonJS({
             this.href = parsed.pathname + parsed.search;
           }
           if (!this.applyLoadedData()) {
-            Pjax4.emit("error", {
-              href: this.href,
-              opts: this.opts,
-              reason: "apply"
-            });
-            Pjax4.emit("complete", {
-              href: this.href,
-              opts: this.opts
+            this.emitDone({
+              status: this.req.status,
+              error: "apply"
             });
             return this.redirect();
           }
           if (typeof this.opts.done === "function") {
             this.opts.done();
           }
-          Pjax4.emit("success", {
-            href: this.href,
-            opts: this.opts,
+          this.emitDone({
             status: this.req.status
-          });
-          Pjax4.emit("complete", {
-            href: this.href,
-            opts: this.opts
           });
           if (!(this.opts.scroll === false || Pjax4.shouldSkipScroll(this.opts.node))) {
             return window.requestAnimationFrame(function() {

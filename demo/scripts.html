@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dux-pjax · Scripts</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://dux.github.io/fez/dist/fez.js"></script>
+    <script fez="components/demo-menu.fez"></script>
+    <script fez="components/demo-api.fez"></script>
+    <script fez="components/demo-event-log.fez"></script>
+    <script fez="components/demo-counter.fez"></script>
+    <script fez="components/demo-confirm.fez"></script>
+    <script fez="components/random-str.fez"></script>
+    <script defer src="../dist/pjax.global.js"></script>
+    <script defer src="demo-boot.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <h1>dux-pjax</h1>
+        <demo-menu></demo-menu>
+      </header>
+      <div class="layout">
+        <main id="pjax" class="pjax">
+          <section class="hero">
+            <h2>Inline scripts</h2>
+            <p>Inline <code>&lt;script&gt;</code> tags in a response are replayed by <code>Pjax.parseScripts</code>. By default they run <em>before</em> the morph — tag with <code>pjax-delay</code> to defer to the next animation frame.</p>
+          </section>
+
+          <section>
+            <h3>Demo</h3>
+            <p>Click Refresh repeatedly. The pre-morph script <em>runs</em> every time (the counter goes up), but its DOM writes never make it on screen — the morph that follows replaces them. The <code>pjax-delay</code> script writes after the morph, so its timestamp updates as expected.</p>
+            <button onclick="Pjax.refresh('#pjax')">Pjax.refresh('#pjax')</button>
+
+            <article>
+              <h4>Pre-morph script (no flag)</h4>
+              <p>DOM write attempt: <strong id="pre">—</strong> <span class="hint-inline">(reset by every morph)</span></p>
+              <p>This script has run: <strong id="pre-count">—</strong> time(s) <span class="hint-inline">(global counter — survives morphs)</span></p>
+              <script>
+                window.__preCount = (window.__preCount || 0) + 1
+                try {
+                  const el = document.getElementById('pre')
+                  if (el) el.textContent = 'wrote @ ' + new Date().toLocaleTimeString()
+                } catch (e) {}
+              </script>
+            </article>
+
+            <article>
+              <h4>Post-morph script (<code>pjax-delay</code>)</h4>
+              <p>DOM write: <strong id="post">—</strong></p>
+              <script pjax-delay>
+                requestAnimationFrame(() => {
+                  const el = document.getElementById('post')
+                  if (el) el.textContent = 'wrote @ ' + new Date().toLocaleTimeString()
+                  const c = document.getElementById('pre-count')
+                  if (c) c.textContent = String(window.__preCount || 0)
+                })
+              </script>
+            </article>
+
+            <p class="hint">The pre-morph script's DOM write is discarded, but its global state (<code>window.__preCount</code>) persists. That's the use case — seed globals or wire listeners pre-morph; do DOM work in <code>pjax-delay</code> or in a <code>pjax:render</code> listener.</p>
+          </section>
+
+          <style>
+            .hint-inline { color: #94a3b8; font-size: 0.8rem; }
+          </style>
+
+          <section>
+            <h3>Why this exists</h3>
+            <p>Pre-morph scripts are useful for seeding globals or registering listeners that the rendered markup will consume on <code>pjax:render</code>. For DOM wiring against the just-inserted nodes, prefer <code>pjax-delay</code> or a <code>pjax:render</code> listener.</p>
+          </section>
+        </main>
+        <demo-event-log></demo-event-log>
+      </div>
+    </div>
+  </body>
+</html>

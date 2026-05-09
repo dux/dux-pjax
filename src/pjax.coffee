@@ -80,7 +80,17 @@ class Pjax
     window.history.replaceState {}, document.title, href
 
   @sendGlobalEvent: ->
-    document.dispatchEvent new CustomEvent('pjax:render', bubbles: true)
+    Pjax._dispatchRender
+      from:     null
+      to:       Pjax.path()
+      status:   200
+      error:    null
+      duration: 0
+      mode:     'full'
+      opts:     {}
+
+  @_dispatchRender: (detail) ->
+    document.dispatchEvent new CustomEvent('pjax:render', bubbles: true, detail: detail)
 
   @emit: (name, detail) ->
     event = new CustomEvent("pjax:#{name}", bubbles: true, cancelable: true, detail: detail)
@@ -188,7 +198,6 @@ class Pjax
       finish = =>
         @morphInto pjaxNode, @parseScripts(new_body)
         @after href
-        @sendGlobalEvent()
 
       if @useViewTransition && document.startViewTransition
         document.startViewTransition finish
@@ -291,6 +300,24 @@ class Pjax
       location.href = @href
     false
 
+  swapMode: ->
+    return 'target' if @opts.target
+    return 'ajax'   if @opts.ajax_node
+    'full'
+
+  emitDone: (extra = {}) ->
+    duration = if @opts.req_start_time then Date.now() - @opts.req_start_time else 0
+    detail = Object.assign(
+      from:     Pjax.pastHref || null
+      to:       @href
+      status:   null
+      error:    null
+      duration: duration
+      mode:     @swapMode()
+      opts:     @opts
+    , extra)
+    Pjax._dispatchRender(detail)
+
   load: ->
     return false unless @href
 
@@ -311,7 +338,6 @@ class Pjax
       return window.open @href
 
     return if Pjax.before(@href, @opts) == false
-    return if Pjax.emit('before', href: @href, opts: @opts) == false
     return if location.hash && location.pathname == @href
 
     if @href.startsWith('#')
@@ -333,10 +359,14 @@ class Pjax
     false
 
   sendRequest: ->
-    Pjax.emit 'start', href: @href, opts: @opts
-
     @opts.req_start_time = Date.now()
     @opts.path = @href
+
+    Pjax.emit 'start',
+      from: Pjax.pastHref || null
+      to:   @href
+      mode: @swapMode()
+      opts: @opts
 
     headers = 'x-requested-with': 'XMLHttpRequest'
     headers['cache-control'] = 'no-cache' if @opts.cache == false
@@ -347,14 +377,12 @@ class Pjax
     @req.onerror = (e) =>
       Pjax.error 'Net error: Server response not received (Pjax)'
       console.error e
-      Pjax.emit 'error', href: @href, opts: @opts, reason: 'network'
-      Pjax.emit 'complete', href: @href, opts: @opts
+      @emitDone status: 0, error: 'network'
 
     @req.ontimeout = =>
       Pjax.request = null
       Pjax.error "Request timeout: #{@href}"
-      Pjax.emit 'error', href: @href, opts: @opts, reason: 'timeout'
-      Pjax.emit 'complete', href: @href, opts: @opts
+      @emitDone status: 0, error: 'timeout'
       @redirect()
 
     @req.open 'GET', @href
@@ -372,8 +400,7 @@ class Pjax
     Pjax.console "#{log_data} (app #{@req.getResponseHeader('x-lux-speed') || 'n/a'}, real #{time_diff}ms, status #{@req.status})"
 
     if @req.status != 200
-      Pjax.emit 'error', href: @href, opts: @opts, reason: 'status', status: @req.status
-      Pjax.emit 'complete', href: @href, opts: @opts
+      @emitDone status: @req.status, error: 'status'
       return @redirect()
 
     if rul = @req.responseURL
@@ -381,13 +408,11 @@ class Pjax
       @href = parsed.pathname + parsed.search
 
     unless @applyLoadedData()
-      Pjax.emit 'error', href: @href, opts: @opts, reason: 'apply'
-      Pjax.emit 'complete', href: @href, opts: @opts
+      @emitDone status: @req.status, error: 'apply'
       return @redirect()
 
     @opts.done() if typeof @opts.done == 'function'
-    Pjax.emit 'success', href: @href, opts: @opts, status: @req.status
-    Pjax.emit 'complete', href: @href, opts: @opts
+    @emitDone status: @req.status
 
     unless @opts.scroll == false || Pjax.shouldSkipScroll(@opts.node)
       window.requestAnimationFrame ->

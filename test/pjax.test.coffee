@@ -660,20 +660,14 @@ describe 'Pjax module', ->
     Pjax.setPageBody node, '/no-title'
     expect(document.title).to.equal 'no page title (pjax)'
 
-  it 'setPageBody fires pjax:render event', ->
+  it 'setPageBody morphs new body in', ->
     Pjax = loadPjax()
-    fired = false
-    handler = -> fired = true
-    document.addEventListener 'pjax:render', handler
-
-    try
-      node = document.createElement 'div'
-      node.innerHTML = '<title>T</title><main class="pjax" id="pjax"><p>Body</p></main>'
-      Pjax.after = ->
-      Pjax.setPageBody node, '/event-test'
-      expect(fired).to.equal true
-    finally
-      document.removeEventListener 'pjax:render', handler
+    node = document.createElement 'div'
+    node.innerHTML = '<title>T</title><main class="pjax" id="pjax"><p>Body</p></main>'
+    Pjax.after = ->
+    Pjax.setPageBody node, '/event-test'
+    pjaxNode = Pjax.node()
+    expect(pjaxNode.querySelector('p')?.textContent).to.equal 'Body'
 
   # --- push alias ---
 
@@ -765,30 +759,6 @@ describe 'Pjax module', ->
       expect(replaced).to.equal '/replaced-path'
     finally
       window.history.replaceState = originalReplace
-
-  # --- pjax:start event ---
-
-  it 'sendRequest dispatches pjax:start event', ->
-    Pjax = loadPjax()
-    global.event = undefined
-    fired = false
-    handler = -> fired = true
-    document.addEventListener 'pjax:start', handler
-
-    MockXHR = class
-      open: ->
-      setRequestHeader: ->
-      send: ->
-    OrigXHR = global.XMLHttpRequest
-    global.XMLHttpRequest = MockXHR
-
-    try
-      pjax = new Pjax(path: '/start-test')
-      pjax.load()
-      expect(fired).to.equal true
-    finally
-      global.XMLHttpRequest = OrigXHR
-      document.removeEventListener 'pjax:start', handler
 
   # --- qs null/false removal ---
 
@@ -1178,67 +1148,38 @@ describe 'Pjax lifecycle events', ->
     Pjax = loadPjaxFresh()
     expect(Pjax.emit('before', href: '/x')).to.equal true
 
-  it 'instance load aborts when pjax:before listener prevents', ->
-    Pjax = loadPjaxFresh()
-    Pjax.before = -> true
-    handler = (e) -> e.preventDefault()
-    document.addEventListener 'pjax:before', handler
-    sentRequest = false
-    pjax = new Pjax(path: '/blocked-by-event')
-    pjax.sendRequest = -> sentRequest = true
-
-    try
-      pjax.load()
-      expect(sentRequest).to.equal false
-    finally
-      document.removeEventListener 'pjax:before', handler
-
-  it 'pjax:before detail carries href and opts', ->
+  it 'pjax:render carries error detail on non-200 response', ->
     Pjax = loadPjaxFresh()
     captured = null
     handler = (e) -> captured = e.detail
-    document.addEventListener 'pjax:before', handler
-
-    try
-      Pjax.emit 'before', href: '/foo', opts: { scroll: false }
-      expect(captured.href).to.equal '/foo'
-      expect(captured.opts.scroll).to.equal false
-    finally
-      document.removeEventListener 'pjax:before', handler
-
-  it 'fires pjax:error and pjax:complete on non-200 response', ->
-    Pjax = loadPjaxFresh()
-    fired = []
-    onError = (e) -> fired.push 'error:' + e.detail.status
-    onComplete = -> fired.push 'complete'
-    document.addEventListener 'pjax:error', onError
-    document.addEventListener 'pjax:complete', onComplete
+    document.addEventListener 'pjax:render', handler
 
     try
       pjax = new Pjax(path: '/missing')
       pjax.req =
         status: 404
         getResponseHeader: -> null
-      pjax.opts.req_start_time = Date.now()
+      pjax.opts.req_start_time = Date.now() - 50
       pjax.redirect = ->
       pjax.handleResponse()
-      expect(fired).to.deep.equal ['error:404', 'complete']
+      expect(captured.status).to.equal 404
+      expect(captured.error).to.equal 'status'
+      expect(captured.to).to.equal '/missing'
+      expect(captured.mode).to.equal 'full'
+      expect(typeof captured.duration).to.equal 'number'
     finally
-      document.removeEventListener 'pjax:error', onError
-      document.removeEventListener 'pjax:complete', onComplete
+      document.removeEventListener 'pjax:render', handler
 
-  it 'fires pjax:success and pjax:complete on successful response', ->
+  it 'pjax:render carries ok detail on successful response', ->
     Pjax = loadPjaxFresh()
     originalPush = window.history.pushState
     originalReplace = window.history.replaceState
     window.history.pushState = ->
     window.history.replaceState = ->
 
-    fired = []
-    onSuccess = -> fired.push 'success'
-    onComplete = -> fired.push 'complete'
-    document.addEventListener 'pjax:success', onSuccess
-    document.addEventListener 'pjax:complete', onComplete
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:render', handler
 
     try
       pjax = new Pjax(path: '/ok')
@@ -1247,14 +1188,70 @@ describe 'Pjax lifecycle events', ->
         responseText: '<main class="pjax" id="pjax"><p>ok</p></main>'
         getResponseHeader: -> null
         responseURL: ''
-      pjax.opts.req_start_time = Date.now()
+      pjax.opts.req_start_time = Date.now() - 50
       pjax.handleResponse()
-      expect(fired).to.deep.equal ['success', 'complete']
+      expect(captured.status).to.equal 200
+      expect(captured.error).to.equal null
+      expect(captured.to).to.equal '/ok'
+      expect(captured.mode).to.equal 'full'
     finally
-      document.removeEventListener 'pjax:success', onSuccess
-      document.removeEventListener 'pjax:complete', onComplete
+      document.removeEventListener 'pjax:render', handler
       window.history.pushState = originalPush
       window.history.replaceState = originalReplace
+
+  it 'sendRequest emits pjax:start with from/to/mode/opts', ->
+    Pjax = loadPjaxFresh()
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:start', handler
+
+    OrigXHR = global.XMLHttpRequest
+    class MockXHR
+      open: ->
+      setRequestHeader: ->
+      send: ->
+    global.XMLHttpRequest = MockXHR
+
+    try
+      Pjax.pastHref = '/from'
+      pjax = new Pjax(path: '/to')
+      pjax.sendRequest()
+      expect(captured.from).to.equal '/from'
+      expect(captured.to).to.equal '/to'
+      expect(captured.mode).to.equal 'full'
+      expect(captured.opts).to.equal pjax.opts
+      expect(captured.status).to.equal undefined
+    finally
+      global.XMLHttpRequest = OrigXHR
+      document.removeEventListener 'pjax:start', handler
+
+  it 'pjax:render carries error:network when XHR onerror fires', ->
+    Pjax = loadPjaxFresh()
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:render', handler
+
+    OrigXHR = global.XMLHttpRequest
+    capturedXHR = null
+    class MockXHR
+      constructor: ->
+        capturedXHR = this
+      open: ->
+      setRequestHeader: ->
+      send: ->
+
+    global.XMLHttpRequest = MockXHR
+
+    try
+      pjax = new Pjax(path: '/dead')
+      pjax.sendRequest()
+      capturedXHR.onerror(new Error 'boom')
+      expect(captured.error).to.equal 'network'
+      expect(captured.status).to.equal 0
+      expect(captured.to).to.equal '/dead'
+    finally
+      global.XMLHttpRequest = OrigXHR
+      document.removeEventListener 'pjax:render', handler
 
   it 'opts.replace forces replaceState instead of pushState', ->
     Pjax = loadPjaxFresh()

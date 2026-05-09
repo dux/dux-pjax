@@ -1,0 +1,100 @@
+<info>
+  <ul>
+    <li>API reference table for the home page</li>
+    <li>Lists methods and lifecycle events from the README</li>
+  </ul>
+</info>
+
+<script>
+  class {
+    init() {
+      this.state.api = [
+        ['Pjax.load(path, opts?)',         'Navigate without full reload'],
+        ['Pjax.refresh(target, opts?)',    'In-place refresh, scroll preserved'],
+        ['Pjax.reload(opts?)',             'Force no-cache reload, scroll to top'],
+        ['Pjax.onDocumentClick()',         'Install global link click handler'],
+        ['Pjax.before(href, opts)',        'Hook before navigation (return false to cancel)'],
+        ['Pjax.after(href)',               'Hook after navigation'],
+        ['Pjax.confirm(msg, node)',        'Override confirm dialog (Promise OK)'],
+        ['Pjax.qs(key, value, opts)',      'Get/set query string param'],
+        ['Pjax.emit(name, detail)',        'Dispatch cancellable pjax:* event'],
+        ['Pjax.path()',                    'Current path + search'],
+        ['Pjax.refreshed()',               'True if last 2 navigations targeted same href'],
+        ['Pjax.parseScripts(htmlOrNode)',  'Replay inline <script> tags'],
+        ['Pjax.useViewTransition',         'Set true to wrap swaps in document.startViewTransition'],
+      ]
+      this.state.events = [
+        ['pjax:start',  'Fires right before XMLHttpRequest.send(). detail = { from, to, mode, opts }'],
+        ['pjax:render', 'Fires once per navigation, on success or error. detail adds { status, error, duration }'],
+      ]
+      this.state.detail = [
+        ['from',     'Previous path (null on first load)'],
+        ['to',       'Target path of this navigation'],
+        ['mode',     '"full" | "target" | "ajax" — which swap path is used'],
+        ['opts',     'The full options bag the navigation was started with'],
+        ['status',   '(render) HTTP status (200, 404, …) or 0 for network/timeout'],
+        ['error',    '(render) null on success; "network" | "timeout" | "status" | "apply" on failure'],
+        ['duration', '(render) wall-clock ms from request start to render'],
+      ]
+    }
+  }
+</script>
+
+<div class="api">
+  <h3>Methods</h3>
+  <table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+      {#each state.api as row}
+        <tr><td><code>{row[0]}</code></td><td>{row[1]}</td></tr>
+      {/each}
+    </tbody>
+  </table>
+
+  <h3>Event</h3>
+  <table>
+    <thead><tr><th>Event</th><th>When</th></tr></thead>
+    <tbody>
+      {#each state.events as row}
+        <tr><td><code>{row[0]}</code></td><td>{row[1]}</td></tr>
+      {/each}
+    </tbody>
+  </table>
+
+  <h3>event.detail</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      {#each state.detail as row}
+        <tr><td><code>{row[0]}</code></td><td>{row[1]}</td></tr>
+      {/each}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .api {
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.88rem;
+      vertical-align: top;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+    code {
+      background: #f1f5f9;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+    }
+  }
+</style>

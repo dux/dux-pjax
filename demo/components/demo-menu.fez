@@ -1,0 +1,101 @@
+<info>
+  <ul>
+    <li>Top navigation for the dux-pjax demo</li>
+    <li>Plain anchors so <code>Pjax.onDocumentClick()</code> hijacks them</li>
+    <li><code>onRefresh</code> reads <code>location.pathname</code>, finds the matching link, sets <code>state.active</code></li>
+  </ul>
+</info>
+
+<script>
+  const LINKS = [
+    { href: './',              label: 'Home',         match: 'index.html' },
+    { href: 'load.html',        label: 'Load',         match: 'load.html' },
+    { href: 'refresh.html',     label: 'Refresh',      match: 'refresh.html' },
+    { href: 'targeted.html',    label: 'Targeted',     match: 'targeted.html' },
+    { href: 'forms.html',       label: 'Forms',        match: 'forms.html' },
+    { href: 'scripts.html',     label: 'Scripts',      match: 'scripts.html' },
+    { href: 'preserve.html',    label: 'Preserve',     match: 'preserve.html' },
+    { href: 'lifecycle.html',   label: 'Lifecycle',    match: 'lifecycle.html' },
+    { href: 'confirm.html',     label: 'Confirm',      match: 'confirm.html' },
+    { href: 'qs.html',          label: 'Query string', match: 'qs.html' },
+    { href: 'transitions.html', label: 'Transitions',  match: 'transitions.html' },
+  ]
+
+  // Compare by basename so the menu works regardless of the base URL
+  // (works at both /demo/ locally and /<repo>/demo/ on GitHub Pages).
+  const basename = (path) => {
+    const last = path.split('/').pop()
+    return last === '' ? 'index.html' : last
+  }
+
+  const matchLink = (path) => {
+    const base = basename(path)
+    return LINKS.find((l) => l.match === base) || null
+  }
+
+  class {
+    init() {
+      this.state.links = LINKS
+      this.state.active = matchLink(location.pathname)
+    }
+
+    onMount() {
+      this.activateActiveNav = this.activateActiveNav.bind(this)
+      document.addEventListener('pjax:render', this.activateActiveNav)
+    }
+
+    onDestroy() {
+      document.removeEventListener('pjax:render', this.activateActiveNav)
+    }
+
+    activateActiveNav(e) {
+      const path = (e && e.detail && e.detail.to) || location.pathname
+      this.state.active = matchLink(path)
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+
+  .current {
+    color: #f8fafc;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    padding: 0.4rem 0.75rem 0.4rem 0;
+    margin-right: 0.5rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  a {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+    }
+
+    &.active {
+      background: #2563eb;
+      color: #fff;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    }
+  }
+</style>
+
+<nav>
+  {#each state.links as link}
+    <a href={link.href} class:active={state.active && state.active.href === link.href}>{link.label}</a>
+  {/each}
+</nav>

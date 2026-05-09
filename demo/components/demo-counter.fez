@@ -1,0 +1,56 @@
+<info>
+  <ul>
+    <li>Stateful counter — used in preserve.html</li>
+    <li>Instance inside <code>#pjax</code> resets on swap, instance outside persists</li>
+  </ul>
+</info>
+
+<demo>
+  <demo-counter label="Demo"></demo-counter>
+</demo>
+
+<script>
+  class {
+    init(props) {
+      this.state.count = 0
+      this.state.label = props.label || 'Counter'
+    }
+
+    inc() { this.state.count++ }
+    dec() { this.state.count-- }
+  }
+</script>
+
+<div>
+  <strong>{state.label}:</strong>
+  <button onclick="fez.dec()">−</button>
+  <span class="value">{state.count}</span>
+  <button onclick="fez.inc()">+</button>
+</div>
+
+<style>
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+
+  .value {
+    min-width: 2ch;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  button {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.9rem;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: none;
+  }
+</style>

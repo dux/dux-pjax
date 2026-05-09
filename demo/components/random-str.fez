@@ -1,0 +1,42 @@
+<info>
+  <ul>
+    <li>Renders a short random base-36 token</li>
+    <li>Re-rolls in <code>onRefresh</code>, so it changes every time a fez parent re-renders and preserves it</li>
+    <li>Useful as a "proof of re-render" indicator inside <code>#pjax</code></li>
+  </ul>
+</info>
+
+<demo>
+  <random-str></random-str>
+</demo>
+
+<script>
+  class {
+    init() {
+      this.state.token = this.roll()
+    }
+
+    onRefresh() {
+      this.state.token = this.roll()
+    }
+
+    roll() {
+      return Math.random().toString(36).slice(2, 10)
+    }
+  }
+</script>
+
+<code>{state.token}</code>
+
+<style>
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+
+  code {
+    background: #f1f5f9;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #0f172a;
+  }
+</style>

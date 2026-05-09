@@ -1,0 +1,98 @@
+<info>
+  <ul>
+    <li>Custom confirm modal — wired into <code>Pjax.confirm</code></li>
+    <li>Singleton: <code>GLOBAL = 'DemoConfirm'</code>, exposes <code>window.DemoConfirm.ask(msg, node)</code></li>
+    <li>Returns a Promise so the click is held until the user picks</li>
+  </ul>
+</info>
+
+<script>
+  class {
+    GLOBAL = 'DemoConfirm'
+
+    init() {
+      this.state.open = false
+      this.state.message = ''
+      this.state.yes = 'Confirm'
+      this.state.no = 'Cancel'
+      this.resolver = null
+    }
+
+    ask(message, node) {
+      this.state.message = message
+      this.state.yes = (node && node.getAttribute && node.getAttribute('pjax-yes')) || 'Confirm'
+      this.state.no  = (node && node.getAttribute && node.getAttribute('pjax-no'))  || 'Cancel'
+      this.state.open = true
+      return new Promise(r => { this.resolver = r })
+    }
+
+    pick(value) {
+      this.state.open = false
+      const r = this.resolver
+      this.resolver = null
+      if (r) r(value)
+    }
+  }
+</script>
+
+<div class="overlay" class:hidden={!state.open} onclick="fez.pick(false)">
+  {#if state.open}
+    <div class="dialog" onclick="event.stopPropagation()">
+      <p>{state.message}</p>
+      <div class="actions">
+        <button class="ghost" onclick="fez.pick(false)">{state.no}</button>
+        <button class="primary" onclick="fez.pick(true)">{state.yes}</button>
+      </div>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+
+    &.hidden { display: none; }
+  }
+
+  .dialog {
+    background: #fff;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    min-width: 320px;
+    max-width: 480px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
+
+    p {
+      margin: 0 0 1rem 0;
+      font-size: 1rem;
+    }
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.ghost {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    button.primary {
+      background: #2563eb;
+      color: #fff;
+    }
+  }
+</style>

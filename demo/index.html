@@ -2,73 +2,73 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>dux-pjax Demo · Page 1</title>
+    <title>dux-pjax · Home</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="/demo/styles.css" />
-    <script defer src="/dist/pjax.global.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://dux.github.io/fez/dist/fez.js"></script>
+    <script fez="components/demo-menu.fez"></script>
+    <script fez="components/demo-api.fez"></script>
+    <script fez="components/demo-event-log.fez"></script>
+    <script fez="components/demo-counter.fez"></script>
+    <script fez="components/demo-confirm.fez"></script>
+    <script fez="components/random-str.fez"></script>
+    <script defer src="../dist/pjax.global.js"></script>
+    <script defer src="demo-boot.js"></script>
   </head>
   <body>
-    <div id="main" class="layout pjax">
-      <header style="height: 100px;">
-        <h1>dux-pjax demo</h1>
-        <nav>
-          <a href="/demo/index.html">Page 1</a>
-          <a href="/demo/page2.html">Page 2</a>
-        </nav>
+    <div class="shell">
+      <header class="topbar">
+        <h1>dux-pjax</h1>
+        <demo-menu></demo-menu>
       </header>
+      <div class="layout">
+        <main id="pjax" class="pjax">
+          <section class="hero">
+            <h2>PJAX navigation, ~5 KB</h2>
+            <p>
+              <code>dux-pjax</code> swaps a container's HTML instead of reloading the page.
+              PushState + AJAX, scoped refreshes, lifecycle events, custom confirm hook,
+              form interception, inline-script replay.
+            </p>
+<pre><code>import Pjax from 'dux-pjax'
+Pjax.onDocumentClick()        // hijack eligible links once
 
-      <main>
-        <section class="hero">
-          <h2>Welcome to Page 1</h2>
-          <p>This content is replaced via <code>Pjax.load()</code> without a full reload.</p>
-          <p>Rendered at <span id="timestamp"></span></p>
-          <button onclick="Pjax.load('/demo')">Re-load Page 1 &sdot; Pjax.load('/demo')</button>
-          <button onclick="Pjax.load('/demo/page2')">Load Page 2 &sdot; Pjax.load('/demo/demo2')</button>
-        </section>
+Pjax.load('/users')           // navigate
+Pjax.refresh('#sidebar')      // refresh in place
+Pjax.reload()                 // hard reload, no cache</code></pre>
+          </section>
 
-        <section class="widget">
-          <h3>Sidebar Widget</h3>
-          <p>Rendered at <span class="timestamp"></span></p>
-          <button onclick="Pjax.refresh('#sidebar')">Refresh Sidebar &sdot; Pjax.refresh('#sidebar')</button>
-        </section>
+          <section>
+            <h3>How this demo works</h3>
+            <p>
+              Each menu link is a separate <code>.html</code> file. Clicks are intercepted by
+              <code>Pjax.onDocumentClick()</code>; only the contents of <code>#pjax</code> swap.
+              The header, the menu, and the event log on the right live <em>outside</em> the swap
+              target — they survive every navigation.
+            </p>
+            <div class="hint">
+              Watch the event log on the right as you click. Every <code>pjax:*</code> event shows
+              up in real time.
+            </div>
+            <p><strong>fez components in this demo:</strong></p>
+            <ul>
+              <li><code>&lt;demo-menu&gt;</code> — the top navigation</li>
+              <li><code>&lt;demo-event-log&gt;</code> — the live event panel (outside <code>#pjax</code>)</li>
+              <li><code>&lt;demo-confirm&gt;</code> — singleton modal wired into <code>Pjax.confirm</code></li>
+              <li><code>&lt;demo-counter&gt;</code> — stateful demo on the Preserve page</li>
+              <li><code>&lt;demo-api&gt;</code> — the table below</li>
+            </ul>
+            <p>
+              When fez is loaded, <code>Pjax.morphInto</code> automatically uses
+              <code>Fez.nodeMorph</code> instead of <code>innerHTML</code>, so component instances
+              and form input state are preserved across swaps.
+            </p>
+          </section>
 
-        <section class="actions">
-          <h3>Global actions</h3>
-          <div class="buttons">
-            <button onclick="Pjax.refresh('#pjax')">Refresh Main &sdot; Pjax.refresh()</button>
-            <button onclick="Pjax.reload()">Force Reload &sdot; Pjax.reload()</button>
-          </div>
-        </section>
-
-        <script>
-          requestAnimationFrame(function () {
-            var now = new Date();
-            var ms = String(now.getMilliseconds()).padStart(3, '0');
-            var formatted = now.toLocaleTimeString() + '.' + ms;
-
-            var stamp = document.getElementById('timestamp');
-            if (stamp) stamp.textContent = formatted;
-
-            var parts = document.querySelectorAll('.timestamp');
-            parts.forEach(function (node) {
-              node.textContent = formatted;
-            });
-          });
-        </script>
-      </main>
-
-      <aside class="log" id="sidebar">
-        <h3>Event log</h3>
-        <div id="event-log"></div>
-        <br />
-        <button onclick="Pjax.refresh('#sidebar')">Refresh Log (Pjax.refresh)</button>
-        <script>
-          requestAnimationFrame(function () {
-            var log = document.getElementById('event-log');
-            log.innerHTML = 'Random sample: ' + Math.random().toFixed(5);
-          });
-        </script>
-      </aside>
+          <demo-api></demo-api>
+        </main>
+        <demo-event-log></demo-event-log>
+      </div>
     </div>
   </body>
 </html>
