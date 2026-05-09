@@ -435,6 +435,20 @@ describe 'Pjax module', ->
 
     expect(ajaxNode.innerHTML).to.include 'Full response fallback'
 
+  it 'applyLoadedData matches target ids containing selector metacharacters', ->
+    Pjax = loadPjax()
+    target = document.createElement 'div'
+    target.id = 'user:42.panel'
+    target.innerHTML = 'Old'
+    document.getElementById('pjax').appendChild target
+
+    pjax = new Pjax(path: '/special-id', target: target)
+    pjax.response = '<main class="pjax" id="pjax"><div id="user:42.panel">New</div></main>'
+    result = pjax.applyLoadedData()
+
+    expect(result).to.equal true
+    expect(target.innerHTML).to.equal 'New'
+
   it 'applyLoadedData in full swap mode stores response in historyData', ->
     Pjax = loadPjax()
     originalPush = window.history.pushState
@@ -1251,6 +1265,82 @@ describe 'Pjax lifecycle events', ->
       expect(captured.to).to.equal '/dead'
     finally
       global.XMLHttpRequest = OrigXHR
+      document.removeEventListener 'pjax:render', handler
+
+  it 'pjax:render carries error:abort when XHR onabort fires', ->
+    Pjax = loadPjaxFresh()
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:render', handler
+
+    OrigXHR = global.XMLHttpRequest
+    capturedXHR = null
+    class MockXHR
+      constructor: ->
+        capturedXHR = this
+      open: ->
+      setRequestHeader: ->
+      send: ->
+
+    global.XMLHttpRequest = MockXHR
+
+    try
+      pjax = new Pjax(path: '/aborted')
+      pjax.sendRequest()
+      capturedXHR.onabort()
+      expect(captured.error).to.equal 'abort'
+      expect(captured.status).to.equal 0
+      expect(captured.to).to.equal '/aborted'
+    finally
+      global.XMLHttpRequest = OrigXHR
+      document.removeEventListener 'pjax:render', handler
+
+  it 'does not push history when response apply fails', ->
+    Pjax = loadPjaxFresh()
+    pushed = false
+    redirected = false
+    originalPush = window.history.pushState
+    window.history.pushState = -> pushed = true
+
+    try
+      pjax = new Pjax(path: '/missing-container')
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="other"><p>wrong container</p></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.redirect = -> redirected = true
+      pjax.handleResponse()
+      expect(pushed).to.equal false
+      expect(redirected).to.equal true
+    finally
+      window.history.pushState = originalPush
+
+  it 'reports apply error when inline script throws before morph', ->
+    Pjax = loadPjaxFresh()
+    captured = null
+    pushed = false
+    redirected = false
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:render', handler
+    originalPush = window.history.pushState
+    window.history.pushState = -> pushed = true
+
+    try
+      pjax = new Pjax(path: '/bad-script')
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="pjax"><script>throw new Error("boom")</script></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.redirect = -> redirected = true
+      pjax.handleResponse()
+      expect(captured.error).to.equal 'apply'
+      expect(captured.status).to.equal 200
+      expect(pushed).to.equal false
+      expect(redirected).to.equal true
+    finally
+      window.history.pushState = originalPush
       document.removeEventListener 'pjax:render', handler
 
   it 'opts.replace forces replaceState instead of pushState', ->

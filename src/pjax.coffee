@@ -193,16 +193,20 @@ class Pjax
     document.title = title || 'no page title (pjax)'
     @scrollLock()
     pjaxNode = @node()
-    return unless pjaxNode
-    if new_body = node.querySelector('#' + pjaxNode.id)
+    return false unless pjaxNode
+    if new_body = @findById node, pjaxNode.id
       finish = =>
         @morphInto pjaxNode, @parseScripts(new_body)
         @after href
 
       if @useViewTransition && document.startViewTransition
         document.startViewTransition finish
+        true
       else
         finish()
+        true
+    else
+      false
 
   @morphInto: (target, html) ->
     if window.Fez?.nodeMorph
@@ -240,6 +244,15 @@ class Pjax
       if script_tag.hasAttribute('pjax-delay') then requestAnimationFrame(func) else func()
 
     node.innerHTML
+
+  @findById: (root, id) ->
+    return unless root && id
+    if root.getElementById
+      root.getElementById id
+    else
+      for node in root.querySelectorAll('[id]')
+        return node if node.id == id
+      null
 
   # --- querystring helper ---
 
@@ -375,9 +388,14 @@ class Pjax
     @req.timeout = Pjax.config.timeout || 10000
 
     @req.onerror = (e) =>
+      Pjax.request = null if Pjax.request == @req
       Pjax.error 'Net error: Server response not received (Pjax)'
       console.error e
       @emitDone status: 0, error: 'network'
+
+    @req.onabort = =>
+      Pjax.request = null if Pjax.request == @req
+      @emitDone status: 0, error: 'abort'
 
     @req.ontimeout = =>
       Pjax.request = null
@@ -407,10 +425,18 @@ class Pjax
       parsed = new URL(rul)
       @href = parsed.pathname + parsed.search
 
-    unless @applyLoadedData()
+    try
+      applied = @applyLoadedData()
+    catch err
+      Pjax.error "Apply failed: #{err?.message || err}"
+      console.error err
+      applied = false
+
+    unless applied
       @emitDone status: @req.status, error: 'apply'
       return @redirect()
 
+    @historyAddCurrent @opts.replacePath || @href
     @opts.done() if typeof @opts.done == 'function'
     @emitDone status: @req.status
 
@@ -425,8 +451,6 @@ class Pjax
     return unless @pjaxNode
     return Pjax.error('No ID attribute on pjax node') unless @pjaxNode.id
 
-    @historyAddCurrent @opts.replacePath || @href
-
     @rroot = document.createElement('div')
     @rroot.innerHTML = @response
 
@@ -440,7 +464,7 @@ class Pjax
       Pjax.error 'ID attribute not found on Pjax target'
       return false
 
-    rtarget = @rroot.querySelector('#' + id)
+    rtarget = Pjax.findById @rroot, id
     return false unless rtarget
 
     Pjax.scrollLock()
@@ -452,7 +476,7 @@ class Pjax
     ajax_node.setAttribute 'data-path', @href
     ajax_node.removeAttribute 'path'
     ajax_id = ajax_node.getAttribute('id') || Pjax.error('Pjax .ajax node has no ID')
-    ajax_data = @rroot.querySelector('#' + ajax_id)?.innerHTML || @response
+    ajax_data = Pjax.findById(@rroot, ajax_id)?.innerHTML || @response
     Pjax.morphInto ajax_node, Pjax.parseScripts(ajax_data)
     true
 

@@ -372,18 +372,22 @@ var require_pjax = __commonJS({
           this.scrollLock();
           pjaxNode = this.node();
           if (!pjaxNode) {
-            return;
+            return false;
           }
-          if (new_body = node.querySelector("#" + pjaxNode.id)) {
+          if (new_body = this.findById(node, pjaxNode.id)) {
             finish = () => {
               this.morphInto(pjaxNode, this.parseScripts(new_body));
               return this.after(href);
             };
             if (this.useViewTransition && document.startViewTransition) {
-              return document.startViewTransition(finish);
+              document.startViewTransition(finish);
+              return true;
             } else {
-              return finish();
+              finish();
+              return true;
             }
+          } else {
+            return false;
           }
         }
         static morphInto(target, html) {
@@ -427,6 +431,24 @@ var require_pjax = __commonJS({
             }
           }
           return node.innerHTML;
+        }
+        static findById(root, id) {
+          var i, len, node, ref;
+          if (!(root && id)) {
+            return;
+          }
+          if (root.getElementById) {
+            return root.getElementById(id);
+          } else {
+            ref = root.querySelectorAll("[id]");
+            for (i = 0, len = ref.length; i < len; i++) {
+              node = ref[i];
+              if (node.id === id) {
+                return node;
+              }
+            }
+            return null;
+          }
         }
         // --- querystring helper ---
         static qs(key, value, opts = {}) {
@@ -615,11 +637,23 @@ var require_pjax = __commonJS({
           Pjax4.request = this.req = new XMLHttpRequest();
           this.req.timeout = Pjax4.config.timeout || 1e4;
           this.req.onerror = (e) => {
+            if (Pjax4.request === this.req) {
+              Pjax4.request = null;
+            }
             Pjax4.error("Net error: Server response not received (Pjax)");
             console.error(e);
             return this.emitDone({
               status: 0,
               error: "network"
+            });
+          };
+          this.req.onabort = () => {
+            if (Pjax4.request === this.req) {
+              Pjax4.request = null;
+            }
+            return this.emitDone({
+              status: 0,
+              error: "abort"
             });
           };
           this.req.ontimeout = () => {
@@ -642,7 +676,7 @@ var require_pjax = __commonJS({
           return this.req.send();
         }
         handleResponse() {
-          var log_data, parsed, rul, time_diff;
+          var applied, err, log_data, parsed, rul, time_diff;
           Pjax4.request = null;
           this.response = this.req.responseText;
           time_diff = Date.now() - this.opts.req_start_time;
@@ -662,13 +696,22 @@ var require_pjax = __commonJS({
             parsed = new URL(rul);
             this.href = parsed.pathname + parsed.search;
           }
-          if (!this.applyLoadedData()) {
+          try {
+            applied = this.applyLoadedData();
+          } catch (error) {
+            err = error;
+            Pjax4.error(`Apply failed: ${(err != null ? err.message : void 0) || err}`);
+            console.error(err);
+            applied = false;
+          }
+          if (!applied) {
             this.emitDone({
               status: this.req.status,
               error: "apply"
             });
             return this.redirect();
           }
+          this.historyAddCurrent(this.opts.replacePath || this.href);
           if (typeof this.opts.done === "function") {
             this.opts.done();
           }
@@ -695,7 +738,6 @@ var require_pjax = __commonJS({
           if (!this.pjaxNode.id) {
             return Pjax4.error("No ID attribute on pjax node");
           }
-          this.historyAddCurrent(this.opts.replacePath || this.href);
           this.rroot = document.createElement("div");
           this.rroot.innerHTML = this.response;
           if (this.opts.target && this.applyTarget()) {
@@ -713,7 +755,7 @@ var require_pjax = __commonJS({
             Pjax4.error("ID attribute not found on Pjax target");
             return false;
           }
-          rtarget = this.rroot.querySelector("#" + id);
+          rtarget = Pjax4.findById(this.rroot, id);
           if (!rtarget) {
             return false;
           }
@@ -727,7 +769,7 @@ var require_pjax = __commonJS({
           ajax_node.setAttribute("data-path", this.href);
           ajax_node.removeAttribute("path");
           ajax_id = ajax_node.getAttribute("id") || Pjax4.error("Pjax .ajax node has no ID");
-          ajax_data = ((ref = this.rroot.querySelector("#" + ajax_id)) != null ? ref.innerHTML : void 0) || this.response;
+          ajax_data = ((ref = Pjax4.findById(this.rroot, ajax_id)) != null ? ref.innerHTML : void 0) || this.response;
           Pjax4.morphInto(ajax_node, Pjax4.parseScripts(ajax_data));
           return true;
         }
