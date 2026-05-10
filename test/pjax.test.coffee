@@ -449,7 +449,7 @@ describe 'Pjax module', ->
     expect(result).to.equal true
     expect(target.innerHTML).to.equal 'New'
 
-  it 'applyLoadedData in full swap mode stores response in historyData', ->
+  it 'applyLoadedData in full swap mode stores response by destination href', ->
     Pjax = loadPjax()
     originalPush = window.history.pushState
     originalReplace = window.history.replaceState
@@ -461,7 +461,7 @@ describe 'Pjax module', ->
       pjax = new Pjax(path: '/cached-page')
       pjax.response = response
       pjax.applyLoadedData()
-      expect(Pjax.historyData[Pjax.path()].html).to.equal response
+      expect(Pjax.historyData['/cached-page'].html).to.equal response
     finally
       window.history.pushState = originalPush
       window.history.replaceState = originalReplace
@@ -682,6 +682,34 @@ describe 'Pjax module', ->
     Pjax.setPageBody node, '/event-test'
     pjaxNode = Pjax.node()
     expect(pjaxNode.querySelector('p')?.textContent).to.equal 'Body'
+
+  it 'morphInto keeps a single wrapper child when Fez.nodeMorph is present', ->
+    Pjax = loadPjax()
+    target = document.getElementById('pjax')
+    target.innerHTML = '<div class="old-wrapper"><p>Old</p></div>'
+
+    originalFez = window.Fez
+    window.Fez =
+      nodeMorph: (target, src) ->
+        if src?.nodeType == 11
+          wrapper = document.createElement target.tagName.toLowerCase()
+          wrapper.appendChild src
+          target.innerHTML = wrapper.innerHTML
+        else
+          wrapper = document.createElement target.tagName.toLowerCase()
+          wrapper.innerHTML = src.trim()
+          if wrapper.children.length == 1 && wrapper.firstElementChild.tagName == target.tagName
+            target.innerHTML = wrapper.firstElementChild.innerHTML
+          else
+            target.innerHTML = wrapper.innerHTML
+
+    try
+      Pjax.morphInto target, '<div class="flex"><p>Body</p></div>'
+      expect(target.children.length).to.equal 1
+      expect(target.firstElementChild.className).to.equal 'flex'
+      expect(target.querySelector('.flex p')?.textContent).to.equal 'Body'
+    finally
+      window.Fez = originalFez
 
   # --- push alias ---
 
@@ -1197,6 +1225,7 @@ describe 'Pjax lifecycle events', ->
 
     try
       pjax = new Pjax(path: '/ok')
+      pjax.fromHref = '/from-ok'
       pjax.req =
         status: 200
         responseText: '<main class="pjax" id="pjax"><p>ok</p></main>'
@@ -1206,12 +1235,90 @@ describe 'Pjax lifecycle events', ->
       pjax.handleResponse()
       expect(captured.status).to.equal 200
       expect(captured.error).to.equal null
+      expect(captured.from).to.equal '/from-ok'
       expect(captured.to).to.equal '/ok'
       expect(captured.mode).to.equal 'full'
     finally
       document.removeEventListener 'pjax:render', handler
       window.history.pushState = originalPush
       window.history.replaceState = originalReplace
+
+  it 'pjax:render to uses replacePath when history uses replacePath', ->
+    Pjax = loadPjaxFresh()
+    originalPush = window.history.pushState
+    originalReplace = window.history.replaceState
+    window.history.pushState = ->
+    window.history.replaceState = ->
+
+    captured = null
+    handler = (e) -> captured = e.detail
+    document.addEventListener 'pjax:render', handler
+
+    try
+      pjax = new Pjax(path: '/internal', replacePath: '/visible')
+      pjax.fromHref = '/before'
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="pjax"><p>ok</p></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.opts.req_start_time = Date.now() - 50
+      pjax.handleResponse()
+      expect(captured.from).to.equal '/before'
+      expect(captured.to).to.equal '/visible'
+    finally
+      document.removeEventListener 'pjax:render', handler
+      window.history.pushState = originalPush
+      window.history.replaceState = originalReplace
+
+  it 'commits history before applying a successful response', ->
+    Pjax = loadPjaxFresh()
+    originalPush = window.history.pushState
+    window.history.pushState = ->
+
+    calls = []
+
+    try
+      pjax = new Pjax(path: '/ordered')
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="pjax"><p>ok</p></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.historyAddCurrent = (href) ->
+        calls.push "history:#{href}"
+      pjax.applyLoadedData = ->
+        calls.push 'apply'
+        true
+
+      pjax.handleResponse()
+      expect(calls).to.deep.equal ['history:/ordered', 'apply']
+    finally
+      window.history.pushState = originalPush
+
+  it 'runs response scripts after history has been committed', ->
+    Pjax = loadPjaxFresh()
+    originalPush = window.history.pushState
+    window.history.pushState = ->
+
+    try
+      window.__historyCommittedHref = null
+      window.__scriptSawHistoryHref = null
+      pjax = new Pjax(path: '/script-path')
+      pjax.req =
+        status: 200
+        responseText: '<main class="pjax" id="pjax"><script>window.__scriptSawHistoryHref = window.__historyCommittedHref</script><p>ok</p></main>'
+        getResponseHeader: -> null
+        responseURL: ''
+      pjax.historyAddCurrent = (href) ->
+        window.__historyCommittedHref = href
+
+      pjax.handleResponse()
+      expect(window.__scriptSawHistoryHref).to.equal '/script-path'
+    finally
+      delete window.__historyCommittedHref
+      delete window.__scriptSawHistoryHref
+      window.history.pushState = originalPush
 
   it 'sendRequest emits pjax:start with from/to/mode/opts', ->
     Pjax = loadPjaxFresh()
@@ -1295,7 +1402,7 @@ describe 'Pjax lifecycle events', ->
       global.XMLHttpRequest = OrigXHR
       document.removeEventListener 'pjax:render', handler
 
-  it 'does not push history when response apply fails', ->
+  it 'commits history before redirecting when response apply fails', ->
     Pjax = loadPjaxFresh()
     pushed = false
     redirected = false
@@ -1311,7 +1418,7 @@ describe 'Pjax lifecycle events', ->
         responseURL: ''
       pjax.redirect = -> redirected = true
       pjax.handleResponse()
-      expect(pushed).to.equal false
+      expect(pushed).to.equal true
       expect(redirected).to.equal true
     finally
       window.history.pushState = originalPush
@@ -1337,7 +1444,7 @@ describe 'Pjax lifecycle events', ->
       pjax.handleResponse()
       expect(captured.error).to.equal 'apply'
       expect(captured.status).to.equal 200
-      expect(pushed).to.equal false
+      expect(pushed).to.equal true
       expect(redirected).to.equal true
     finally
       window.history.pushState = originalPush

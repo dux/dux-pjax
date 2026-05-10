@@ -391,9 +391,15 @@ var require_pjax = __commonJS({
           }
         }
         static morphInto(target, html) {
-          var ref;
+          var range, ref;
           if ((ref = window.Fez) != null ? ref.nodeMorph : void 0) {
-            return window.Fez.nodeMorph(target, html);
+            if (typeof html === "string") {
+              range = document.createRange();
+              range.selectNodeContents(target);
+              return window.Fez.nodeMorph(target, range.createContextualFragment(html));
+            } else {
+              return window.Fez.nodeMorph(target, html);
+            }
           } else {
             return target.innerHTML = html;
           }
@@ -494,14 +500,18 @@ var require_pjax = __commonJS({
           }
         }
         // --- history management ---
-        static _addHistoryEntry(html) {
+        static _addHistoryEntry(href, html) {
           var keys, max;
+          if (html == null) {
+            html = href;
+            href = this.path();
+          }
           keys = Object.keys(this.historyData);
           max = this.config.history_max || 20;
           if (keys.length >= max) {
             delete this.historyData[keys[0]];
           }
-          return this.historyData[this.path()] = {
+          return this.historyData[href] = {
             html,
             scrollY: 0
           };
@@ -539,8 +549,8 @@ var require_pjax = __commonJS({
           var detail, duration;
           duration = this.opts.req_start_time ? Date.now() - this.opts.req_start_time : 0;
           detail = Object.assign({
-            from: Pjax4.pastHref || null,
-            to: this.href,
+            from: this.fromHref || Pjax4.pastHref || null,
+            to: this.eventToHref(),
             status: null,
             error: null,
             duration,
@@ -548,6 +558,16 @@ var require_pjax = __commonJS({
             opts: this.opts
           }, extra);
           return Pjax4._dispatchRender(detail);
+        }
+        historyHref() {
+          return this.opts.replacePath || this.href;
+        }
+        eventToHref() {
+          if (this.opts.history === false || this.opts.ajax_node && !this.opts.target) {
+            return this.href;
+          } else {
+            return this.historyHref();
+          }
         }
         load() {
           var currentEntry, e, el, i, len, node, now, ref;
@@ -561,7 +581,8 @@ var require_pjax = __commonJS({
             }
           }
           Pjax4._lastLoadTime = now;
-          currentEntry = Pjax4.historyData[Pjax4.path()];
+          this.fromHref = Pjax4.path();
+          currentEntry = Pjax4.historyData[this.fromHref];
           if (currentEntry) {
             currentEntry.scrollY = window.scrollY;
           }
@@ -623,7 +644,7 @@ var require_pjax = __commonJS({
           this.opts.req_start_time = Date.now();
           this.opts.path = this.href;
           Pjax4.emit("start", {
-            from: Pjax4.pastHref || null,
+            from: this.fromHref || Pjax4.pastHref || null,
             to: this.href,
             mode: this.swapMode(),
             opts: this.opts
@@ -696,6 +717,7 @@ var require_pjax = __commonJS({
             parsed = new URL(rul);
             this.href = parsed.pathname + parsed.search;
           }
+          this.historyAddCurrent(this.historyHref());
           try {
             applied = this.applyLoadedData();
           } catch (error) {
@@ -711,7 +733,6 @@ var require_pjax = __commonJS({
             });
             return this.redirect();
           }
-          this.historyAddCurrent(this.opts.replacePath || this.href);
           if (typeof this.opts.done === "function") {
             this.opts.done();
           }
@@ -774,7 +795,7 @@ var require_pjax = __commonJS({
           return true;
         }
         applyFullSwap() {
-          Pjax4._addHistoryEntry(this.response);
+          Pjax4._addHistoryEntry(this.historyHref(), this.response);
           return Pjax4.setPageBody(this.rroot, this.href);
         }
         historyAddCurrent(href) {

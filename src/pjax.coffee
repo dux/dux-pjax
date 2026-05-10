@@ -210,7 +210,12 @@ class Pjax
 
   @morphInto: (target, html) ->
     if window.Fez?.nodeMorph
-      window.Fez.nodeMorph target, html
+      if typeof html == 'string'
+        range = document.createRange()
+        range.selectNodeContents target
+        window.Fez.nodeMorph target, range.createContextualFragment(html)
+      else
+        window.Fez.nodeMorph target, html
     else
       target.innerHTML = html
 
@@ -230,11 +235,13 @@ class Pjax
         @script_cnt ||= 0
         script_tag.id = "app-sc-#{++@script_cnt}"
 
-      # Scripts run BEFORE the new HTML is morphed into the live document.
+      # Scripts run AFTER history has been committed, but BEFORE the new HTML
+      # is morphed into the live document.
       # Rationale: inline scripts in a response typically set globals/state that
-      # the rendered markup will then consume on `pjax:render`. Running them
-      # against a still-detached DOM also avoids a flash where new nodes appear
-      # before their setup ran.
+      # the rendered markup will then consume on `pjax:render`, and may need
+      # the new `location.pathname + location.search`. Running them against a
+      # still-detached DOM also avoids a flash where new nodes appear before
+      # their setup ran.
       # Side effect: a script cannot `document.querySelector` siblings in the
       # same response (they aren't in `document` yet) — do per-DOM wiring in a
       # `pjax:render` listener, or tag the script `pjax-delay` to defer it to
@@ -288,11 +295,14 @@ class Pjax
 
   # --- history management ---
 
-  @_addHistoryEntry = (html) ->
+  @_addHistoryEntry = (href, html) ->
+    unless html?
+      html = href
+      href = @path()
     keys = Object.keys(@historyData)
     max = @config.history_max || 20
     delete @historyData[keys[0]] if keys.length >= max
-    @historyData[@path()] = html: html, scrollY: 0
+    @historyData[href] = html: html, scrollY: 0
 
   # --- internal ---
 
@@ -321,8 +331,8 @@ class Pjax
   emitDone: (extra = {}) ->
     duration = if @opts.req_start_time then Date.now() - @opts.req_start_time else 0
     detail = Object.assign(
-      from:     Pjax.pastHref || null
-      to:       @href
+      from:     @fromHref || Pjax.pastHref || null
+      to:       @eventToHref()
       status:   null
       error:    null
       duration: duration
@@ -330,6 +340,15 @@ class Pjax
       opts:     @opts
     , extra)
     Pjax._dispatchRender(detail)
+
+  historyHref: ->
+    @opts.replacePath || @href
+
+  eventToHref: ->
+    if @opts.history == false || (@opts.ajax_node && !@opts.target)
+      @href
+    else
+      @historyHref()
 
   load: ->
     return false unless @href
@@ -339,8 +358,10 @@ class Pjax
       return false if Pjax.lastHref == @href && now - (Pjax._lastLoadTime || 0) < 2000
     Pjax._lastLoadTime = now
 
+    @fromHref = Pjax.path()
+
     # save scroll position of current page before navigating
-    currentEntry = Pjax.historyData[Pjax.path()]
+    currentEntry = Pjax.historyData[@fromHref]
     currentEntry.scrollY = window.scrollY if currentEntry
 
     Pjax.pastHref = Pjax.lastHref
@@ -376,7 +397,7 @@ class Pjax
     @opts.path = @href
 
     Pjax.emit 'start',
-      from: Pjax.pastHref || null
+      from: @fromHref || Pjax.pastHref || null
       to:   @href
       mode: @swapMode()
       opts: @opts
@@ -425,6 +446,8 @@ class Pjax
       parsed = new URL(rul)
       @href = parsed.pathname + parsed.search
 
+    @historyAddCurrent @historyHref()
+
     try
       applied = @applyLoadedData()
     catch err
@@ -436,7 +459,6 @@ class Pjax
       @emitDone status: @req.status, error: 'apply'
       return @redirect()
 
-    @historyAddCurrent @opts.replacePath || @href
     @opts.done() if typeof @opts.done == 'function'
     @emitDone status: @req.status
 
@@ -481,7 +503,7 @@ class Pjax
     true
 
   applyFullSwap: ->
-    Pjax._addHistoryEntry @response
+    Pjax._addHistoryEntry @historyHref(), @response
     Pjax.setPageBody @rroot, @href
 
   historyAddCurrent: (href) ->

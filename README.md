@@ -221,7 +221,7 @@ To **cancel** a navigation before it starts, override `Pjax.before(href, opts)` 
 - The module keeps a small in-memory cache (`Pjax.historyData`) that powers instant back/forward restores.
 
 ### Inline script execution order
-Inline `<script>` tags inside a response run **before** the new HTML is morphed into the live document. The intent is to let scripts seed globals/state that the rendered markup will then consume on `pjax:render`. Per-DOM wiring (querying or attaching to the freshly inserted nodes) should be done in a `pjax:render` listener, or in a script tagged with `pjax-delay` — those run on the next animation frame, after the morph.
+Inline `<script>` tags inside a response run **after** history has been committed, but **before** the new HTML is morphed into the live document. That means scripts can read the new `location.pathname + location.search` while still seeding globals/state that the rendered markup will consume on `pjax:render`. Per-DOM wiring (querying or attaching to the freshly inserted nodes) should be done in a `pjax:render` listener, or in a script tagged with `pjax-delay` — those run on the next animation frame, after the morph.
 
 ## Development
 ```bash
