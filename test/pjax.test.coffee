@@ -925,6 +925,46 @@ describe 'PjaxOnClick', ->
     expect(loadedArgs.href).to.equal '/target-page'
     expect(loadedArgs.opts.target).to.equal document.getElementById('target-box')
 
+  it 'uses pjax-refresh to refresh a specific element without href', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <div id="target-box">Old</div>
+        <button pjax-refresh="#target-box" id="refresh-button">Refresh</button>
+      </main>
+    '''
+    refreshedTarget = null
+    Pjax.refresh = (target) -> refreshedTarget = target
+
+    button = document.getElementById('refresh-button')
+    e = createClickEvent(target: button)
+    PjaxOnClick.main(e)
+
+    expect(refreshedTarget).to.equal '#target-box'
+
+  it 'aborts and logs error when pjax-refresh selector matches nothing', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <main class="pjax" id="pjax">
+        <button pjax-refresh="#missing" id="refresh-button">Refresh</button>
+      </main>
+    '''
+    refreshCalled = false
+    Pjax.refresh = -> refreshCalled = true
+    errs = []
+    originalError = Pjax.error
+    Pjax.error = (msg) -> errs.push msg
+
+    try
+      button = document.getElementById('refresh-button')
+      e = createClickEvent(target: button)
+      PjaxOnClick.main(e)
+
+      expect(refreshCalled).to.equal false
+      expect(errs[0]).to.include 'pjax-refresh'
+    finally
+      Pjax.error = originalError
+
   it 'aborts and logs error when pjax-target selector matches nothing', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '''

@@ -31,7 +31,7 @@ var require_onclick = __commonJS({
     PjaxOnClick = {
       main: function(event) {
         var confirmMsg, ctx, node, proceed, result;
-        node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""])');
+        node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""]), *[pjax-refresh]:not([pjax-refresh=""])');
         if (!node) {
           return;
         }
@@ -64,13 +64,22 @@ var require_onclick = __commonJS({
         return proceed();
       },
       execute: function(ctx) {
-        var click, el, href, i, len, node, pjaxTarget, ref, replace, targetNode;
+        var click, el, href, i, len, node, pjaxRefresh, pjaxTarget, ref, replace, targetNode;
         node = ctx.node;
         if (click = node.getAttribute("click")) {
           return new Function(click).bind(node)();
         }
         href = node.getAttribute("href");
         replace = node.hasAttribute("pjax-replace");
+        if (pjaxRefresh = node.getAttribute("pjax-refresh")) {
+          targetNode = document.querySelector(pjaxRefresh);
+          if (!targetNode) {
+            Pjax.error(`pjax-refresh selector did not match: ${pjaxRefresh}`);
+            return;
+          }
+          Pjax.refresh(pjaxRefresh);
+          return;
+        }
         if (pjaxTarget = node.getAttribute("pjax-target")) {
           targetNode = document.querySelector(pjaxTarget);
           if (!targetNode) {

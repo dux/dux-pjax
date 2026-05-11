@@ -1,6 +1,6 @@
 PjaxOnClick =
   main: (event) ->
-    node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""])')
+    node = event.target.closest('*[click]:not([click=""]), *[href]:not([href=""]), *[pjax-refresh]:not([pjax-refresh=""])')
     return unless node
 
     event.stopPropagation()
@@ -35,6 +35,14 @@ PjaxOnClick =
 
     href = node.getAttribute 'href'
     replace = node.hasAttribute('pjax-replace')
+
+    if pjaxRefresh = node.getAttribute('pjax-refresh')
+      targetNode = document.querySelector(pjaxRefresh)
+      unless targetNode
+        Pjax.error "pjax-refresh selector did not match: #{pjaxRefresh}"
+        return
+      Pjax.refresh pjaxRefresh
+      return
 
     if pjaxTarget = node.getAttribute('pjax-target')
       targetNode = document.querySelector(pjaxTarget)
