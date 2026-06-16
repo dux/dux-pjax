@@ -993,19 +993,76 @@ describe 'PjaxOnClick', ->
       window.open = originalOpen
       Pjax.error = originalError
 
-  it 'opens external URLs in new window for no-pjax class links', ->
+  it 'no-pjax link without target navigates the current tab, not a new window', ->
     { Pjax, PjaxOnClick } = loadModules()
     document.body.innerHTML = '<a href="https://example.com" class="no-pjax" id="ext">Ext</a>'
 
     opened = null
+    left = null
     originalOpen = window.open
     window.open = (url) -> opened = url
+    PjaxOnClick.leave = (href, target) -> left = { href, target }
 
     try
-      link = document.getElementById('ext')
-      e = createClickEvent(target: link)
+      e = createClickEvent(target: document.getElementById('ext'))
+      PjaxOnClick.main(e)
+      expect(opened).to.be.null
+      expect(left.href).to.equal 'https://example.com'
+      expect(left.target).to.be.null
+    finally
+      window.open = originalOpen
+
+  it 'no-pjax link with target opens a new window', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '<a href="https://example.com" target="_blank" class="no-pjax" id="ext">Ext</a>'
+
+    opened = null
+    openedTarget = null
+    originalOpen = window.open
+    window.open = (url, target) -> opened = url; openedTarget = target
+
+    try
+      e = createClickEvent(target: document.getElementById('ext'))
       PjaxOnClick.main(e)
       expect(opened).to.equal 'https://example.com'
+      expect(openedTarget).to.equal '_blank'
+    finally
+      window.open = originalOpen
+
+  it 'opts out of pjax when an ancestor carries a no-pjax class', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '''
+      <div class="direct">
+        <a href="/inner-page" id="nested">Go</a>
+      </div>
+    '''
+    left = null
+    loadCalled = false
+    Pjax.load = -> loadCalled = true
+    PjaxOnClick.leave = (href, target) -> left = { href, target }
+
+    e = createClickEvent(target: document.getElementById('nested'))
+    PjaxOnClick.main(e)
+    expect(loadCalled).to.equal false
+    expect(left.href).to.equal '/inner-page'
+    expect(left.target).to.be.null
+
+  it 'external scheme link without target stays in the current tab', ->
+    { Pjax, PjaxOnClick } = loadModules()
+    document.body.innerHTML = '<a href="https://other.example/path" id="scheme">Out</a>'
+
+    opened = null
+    left = null
+    originalOpen = window.open
+    window.open = (url) -> opened = url
+    PjaxOnClick.leave = (href, target) -> left = { href, target }
+
+    try
+      e = createClickEvent(target: document.getElementById('scheme'))
+      PjaxOnClick.main(e)
+      expect(opened).to.be.null
+      expect(left.href).to.equal 'https://other.example/path'
+      expect(left.target).to.be.null
     finally
       window.open = originalOpen
 

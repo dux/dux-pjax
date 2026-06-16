@@ -64,7 +64,7 @@ var require_onclick = __commonJS({
         return proceed();
       },
       execute: function(ctx) {
-        var click, el, href, i, len, node, pjaxRefresh, pjaxTarget, ref, replace, targetNode;
+        var click, cls, href, noPjaxSel, node, pjaxRefresh, pjaxTarget, replace, target, targetNode;
         node = ctx.node;
         if (click = node.getAttribute("click")) {
           return new Function(click).bind(node)();
@@ -95,31 +95,41 @@ var require_onclick = __commonJS({
         if (ctx.which === 2 || ctx.metaKey) {
           return window.open(href);
         }
-        ref = Pjax.config.no_pjax_class;
-        for (i = 0, len = ref.length; i < len; i++) {
-          el = ref[i];
-          if (node.classList.contains(el)) {
-            if (/^http/.test(href)) {
-              return window.open(href);
-            } else {
-              return window.location.href = href;
-            }
+        target = node.getAttribute("target");
+        noPjaxSel = function() {
+          var i, len, ref, results;
+          ref = Pjax.config.no_pjax_class;
+          results = [];
+          for (i = 0, len = ref.length; i < len; i++) {
+            cls = ref[i];
+            results.push(`.${cls}`);
           }
+          return results;
+        }().join(", ");
+        if (noPjaxSel && node.closest(noPjaxSel)) {
+          return PjaxOnClick.leave(href, target);
         }
         if (/^javascript:/.test(href)) {
           return new Function(href.replace(/^javascript:/, ""))();
         }
-        if (/^\w+:/.test(href) || node.getAttribute("target")) {
-          if (/^vscode:/.test(href)) {
-            return window.location.href = href;
-          }
-          return window.open(href, node.getAttribute("target") || href.replace(/[^\w]/g, ""));
+        if (/^\w+:/.test(href) || target) {
+          return PjaxOnClick.leave(href, target);
         }
         Pjax.load(href, {
           ajax: node,
           replace
         });
         return false;
+      },
+      // Leave the SPA. Open a new window only when the link declares a `target`;
+      // otherwise navigate the current tab. Kept as a seam so tests can stub it -
+      // jsdom forbids assigning window.location.
+      leave: function(href, target) {
+        if (target) {
+          return window.open(href, target);
+        } else {
+          return window.location.href = href;
+        }
       }
     };
     if (typeof module !== "undefined" && module.exports) {
@@ -380,6 +390,7 @@ var require_pjax = __commonJS({
           }
           if (new_body = this.findById(node, pjaxNode.id)) {
             finish = () => {
+              this.runHeadScripts(node, new_body);
               this.morphInto(pjaxNode, this.parseScripts(new_body));
               return this.after(href);
             };
@@ -441,6 +452,36 @@ var require_pjax = __commonJS({
             }
           }
           return node.innerHTML;
+        }
+        // Inline <head> scripts of a full-page response are otherwise discarded on a
+        // swap (innerHTML never runs them; only the pjax region is morphed in). Run
+        // those outside the pjax region so head bootstrap - e.g. window.app data and
+        // flash emitted by the server - refreshes on every navigation. src= bundles
+        // and the pjax region's own scripts (handled by parseScripts) are skipped.
+        static runHeadScripts(root, pjaxBody) {
+          var func, i, len, ref, results, script_tag, type;
+          ref = Array.from(root.getElementsByTagName("script"));
+          results = [];
+          for (i = 0, len = ref.length; i < len; i++) {
+            script_tag = ref[i];
+            if (pjaxBody && pjaxBody.contains(script_tag)) {
+              continue;
+            }
+            if (script_tag.getAttribute("src")) {
+              continue;
+            }
+            type = script_tag.getAttribute("type") || "javascript";
+            if (!type.includes("javascript")) {
+              continue;
+            }
+            func = new Function(script_tag.textContent);
+            if (script_tag.hasAttribute("pjax-delay")) {
+              results.push(requestAnimationFrame(func));
+            } else {
+              results.push(func());
+            }
+          }
+          return results;
         }
         static findById(root, id) {
           var i, len, node, ref;
@@ -858,6 +899,7 @@ var require_pjax = __commonJS({
       }
       Pjax3._booted = true;
       setTimeout(Pjax3.sendGlobalEvent, 0);
+      Pjax3.onDocumentClick();
       return document.body.addEventListener("submit", function(e) {
         var form, is_pjax, pjax_target;
         form = e.target;

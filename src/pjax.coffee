@@ -196,6 +196,7 @@ class Pjax
     return false unless pjaxNode
     if new_body = @findById node, pjaxNode.id
       finish = =>
+        @runHeadScripts node, new_body
         @morphInto pjaxNode, @parseScripts(new_body)
         @after href
 
@@ -251,6 +252,20 @@ class Pjax
       if script_tag.hasAttribute('pjax-delay') then requestAnimationFrame(func) else func()
 
     node.innerHTML
+
+  # Inline <head> scripts of a full-page response are otherwise discarded on a
+  # swap (innerHTML never runs them; only the pjax region is morphed in). Run
+  # those outside the pjax region so head bootstrap - e.g. window.app data and
+  # flash emitted by the server - refreshes on every navigation. src= bundles
+  # and the pjax region's own scripts (handled by parseScripts) are skipped.
+  @runHeadScripts: (root, pjaxBody) ->
+    for script_tag in Array.from(root.getElementsByTagName('script'))
+      continue if pjaxBody && pjaxBody.contains(script_tag)
+      continue if script_tag.getAttribute('src')
+      type = script_tag.getAttribute('type') || 'javascript'
+      continue unless type.includes('javascript')
+      func = new Function(script_tag.textContent)
+      if script_tag.hasAttribute('pjax-delay') then requestAnimationFrame(func) else func()
 
   @findById: (root, id) ->
     return unless root && id
@@ -536,6 +551,8 @@ bindPjaxBoot = ->
   return if Pjax._booted
   Pjax._booted = true
   setTimeout Pjax.sendGlobalEvent, 0
+
+  Pjax.onDocumentClick()
 
   document.body.addEventListener 'submit', (e) ->
     form = e.target

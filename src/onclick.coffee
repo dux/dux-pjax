@@ -52,22 +52,36 @@ PjaxOnClick =
       Pjax.load href, target: targetNode, replace: replace
       return
 
+    # middle-click / cmd-click is a user gesture to open a new tab, regardless
+    # of the link's own target.
     if ctx.which == 2 || ctx.metaKey
       return window.open href
 
-    for el in Pjax.config.no_pjax_class
-      if node.classList.contains(el)
-        return if /^http/.test(href) then window.open(href) else window.location.href = href
+    target = node.getAttribute('target')
+
+    # Opt out of pjax when the link, or any ancestor, carries a no-pjax class
+    # (e.g. `direct`, `no-pjax`). closest() walks up the tree so a wrapper opting
+    # out covers everything inside it.
+    noPjaxSel = (".#{cls}" for cls in Pjax.config.no_pjax_class).join(', ')
+    if noPjaxSel and node.closest(noPjaxSel)
+      return PjaxOnClick.leave(href, target)
 
     if /^javascript:/.test(href)
       return (new Function href.replace(/^javascript:/, ''))()
 
-    if /^\w+:/.test(href) || node.getAttribute('target')
-      return window.location.href = href if /^vscode:/.test(href)
-      return window.open(href, node.getAttribute('target') || href.replace(/[^\w]/g, ''))
+    # Scheme links (mailto:, tel:, external http, vscode:) or links asking for a
+    # named target leave pjax too.
+    if /^\w+:/.test(href) || target
+      return PjaxOnClick.leave(href, target)
 
     Pjax.load href, ajax: node, replace: replace
     false
+
+  # Leave the SPA. Open a new window only when the link declares a `target`;
+  # otherwise navigate the current tab. Kept as a seam so tests can stub it -
+  # jsdom forbids assigning window.location.
+  leave: (href, target) ->
+    if target then window.open(href, target) else window.location.href = href
 
 if typeof module != 'undefined' && module.exports
   module.exports = PjaxOnClick
