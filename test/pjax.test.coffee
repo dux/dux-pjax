@@ -1287,6 +1287,25 @@ describe 'Pjax lifecycle events', ->
     Pjax = loadPjaxFresh()
     expect(Pjax.emit('before', href: '/x')).to.equal true
 
+  it 'follows a same-origin redirect in place instead of hard navigating', ->
+    Pjax = loadPjaxFresh()
+    sent = false
+    redirected = false
+
+    pjax = new Pjax(path: '/dev/login_as?user_hash=abc')
+    pjax.sendRequest = -> sent = true
+    pjax.redirect = -> redirected = true
+    pjax.req =
+      status: 302
+      getResponseHeader: (name) -> if name == 'Location' then '/dev/login_as?_r=1' else null
+    pjax.opts.req_start_time = Date.now() - 50
+    pjax.handleResponse()
+
+    expect(sent).to.equal true
+    expect(redirected).to.equal false
+    expect(pjax.href).to.equal '/dev/login_as?_r=1'
+    expect(pjax.opts.replace).to.equal true
+
   it 'pjax:render carries error detail on non-200 response', ->
     Pjax = loadPjaxFresh()
     captured = null

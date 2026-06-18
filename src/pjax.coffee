@@ -338,6 +338,30 @@ class Pjax
       location.href = @href
     false
 
+  # A same-origin redirect (e.g. lux `redirect_to`) comes back as a non-200
+  # with a `Location` header. Re-run it through pjax so we swap in place
+  # instead of forcing a full document load. External hosts fall back to a
+  # real browser navigation.
+  followRedirect: (url) ->
+    if url[0] == '/' && url[1] != '/'
+      # same-origin absolute path, the common `redirect_to '/foo'` case
+      path = url
+    else
+      parsed = new URL(url, location.href)
+      unless parsed.origin == location.origin
+        location.href = url    # external host -> real navigation
+        return false
+      path = parsed.pathname + parsed.search
+
+    @opts.redirects = (@opts.redirects || 0) + 1
+    return @redirect() if @opts.redirects > 5
+
+    @href = path
+    @opts.replace = true       # don't trap the intermediate URL in history
+    Pjax.lastHref = @href
+    @sendRequest()
+    false
+
   swapMode: ->
     return 'target' if @opts.target
     return 'ajax'   if @opts.ajax_node
@@ -454,6 +478,8 @@ class Pjax
     Pjax.console "#{log_data} (app #{@req.getResponseHeader('x-lux-speed') || 'n/a'}, real #{time_diff}ms, status #{@req.status})"
 
     if @req.status != 200
+      if redirect_to = @req.getResponseHeader('Location')
+        return @followRedirect(redirect_to)
       @emitDone status: @req.status, error: 'status'
       return @redirect()
 

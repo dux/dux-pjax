@@ -586,6 +586,32 @@ var require_pjax = __commonJS({
           }
           return false;
         }
+        // A same-origin redirect (e.g. lux `redirect_to`) comes back as a non-200
+        // with a `Location` header. Re-run it through pjax so we swap in place
+        // instead of forcing a full document load. External hosts fall back to a
+        // real browser navigation.
+        followRedirect(url) {
+          var parsed, path;
+          if (url[0] === "/" && url[1] !== "/") {
+            path = url;
+          } else {
+            parsed = new URL(url, location.href);
+            if (parsed.origin !== location.origin) {
+              location.href = url;
+              return false;
+            }
+            path = parsed.pathname + parsed.search;
+          }
+          this.opts.redirects = (this.opts.redirects || 0) + 1;
+          if (this.opts.redirects > 5) {
+            return this.redirect();
+          }
+          this.href = path;
+          this.opts.replace = true;
+          Pjax4.lastHref = this.href;
+          this.sendRequest();
+          return false;
+        }
         swapMode() {
           if (this.opts.target) {
             return "target";
@@ -747,7 +773,7 @@ var require_pjax = __commonJS({
           return this.req.send();
         }
         handleResponse() {
-          var applied, err, log_data, parsed, rul, time_diff;
+          var applied, err, log_data, parsed, redirect_to, rul, time_diff;
           Pjax4.request = null;
           this.response = this.req.responseText;
           time_diff = Date.now() - this.opts.req_start_time;
@@ -757,6 +783,9 @@ var require_pjax = __commonJS({
           }
           Pjax4.console(`${log_data} (app ${this.req.getResponseHeader("x-lux-speed") || "n/a"}, real ${time_diff}ms, status ${this.req.status})`);
           if (this.req.status !== 200) {
+            if (redirect_to = this.req.getResponseHeader("Location")) {
+              return this.followRedirect(redirect_to);
+            }
             this.emitDone({
               status: this.req.status,
               error: "status"
