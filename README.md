@@ -1,5 +1,11 @@
 # dux-pjax
 
+> **DEPRECATED - Pjax now ships inside [fez](https://github.com/dux/fez) (`@dinoreic/fez` 0.6.0+).**
+>
+> The full Pjax implementation was ported to plain JS and merged into the fez bundle: the API is identical (`window.Pjax`), the swap goes through `Fez.nodeMorph`, and handlers bind automatically when the page has a `<pjax>`/`.pjax` container.
+> To migrate: upgrade fez to 0.6.0+, remove `dux-pjax` from your dependencies, and drop the `import Pjax from 'dux-pjax'` / `window.Pjax = Pjax` lines - existing `Pjax.*` calls and link/form attributes keep working unchanged.
+> See the [Pjax Navigation section of the fez README](https://github.com/dux/fez#pjax-navigation). This repo is kept for reference and receives no further development.
+
 **Live demo:** [dux.github.io/dux-pjax/](https://dux.github.io/dux-pjax/)
 
 `dux-pjax` is a lightweight PJAX helper. PJAX (PushState + AJAX) renders a new HTML response into the current page instead of performing a hard navigation. You preserve browser history, avoid expensive asset reloads, and keep any UI state that lives outside the refreshed container. This package focuses on the common pattern of replacing your `<main>` (or any container you choose) with the server-rendered markup coming from a standard controller action.

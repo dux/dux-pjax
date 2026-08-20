@@ -2,6 +2,12 @@
 
 Notes for AI agents (and humans skimming) working in this repo.
 
+## DEPRECATED
+
+Pjax was ported to plain JS and merged into fez (`~/dev/gems/fez`, `@dinoreic/fez` 0.6.0+) under `src/fez/pjax/`.
+Do NOT add features or fixes here - make them in fez.
+This repo stays only as reference for apps that have not migrated yet; migration is: upgrade fez, remove the `dux-pjax` dependency and its import, keep all `Pjax.*` call sites as-is.
+
 ## What this is
 Lightweight PJAX (PushState + AJAX) helper. Replaces `<main>` (or any container with `id` on a `<pjax>` tag or `.pjax` class) with the response body of an XHR, keeping history, scroll, and inline script execution in sync.
 
